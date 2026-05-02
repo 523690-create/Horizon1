@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Horizontal Crosshair -->
+    <path
+        android:strokeColor="@color/white"
+        android:strokeWidth="2"
+        android:pathData="M24,54 L84,54" />
+    <!-- Vertical Crosshair -->
+    <path
+        android:strokeColor="@color/white"
+        android:strokeWidth="2"
+        android:pathData="M54,24 L54,84" />
+</vector>
