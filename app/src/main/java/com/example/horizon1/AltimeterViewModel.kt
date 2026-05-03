@@ -44,7 +44,7 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
     private var currentPressure = 1013.25f
     private var lastLocation: Pair<Double, Double>? = null
 
-    // Reference Airport Database (Subset)
+    // Reference Airport Database (Expanded stub)
     private val airportDb = listOf(
         AirportData("KJFK", "John F. Kennedy", 40.6413, -73.7781, 4.0, 1013.25f),
         AirportData("KLAX", "Los Angeles Intl", 33.9416, -118.4085, 38.0, 1013.25f),
@@ -53,7 +53,14 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
         AirportData("EGLL", "London Heathrow", 51.4700, -0.4543, 25.0, 1013.25f),
         AirportData("LFPG", "Paris Charles de Gaulle", 49.0097, 2.5479, 119.0, 1013.25f),
         AirportData("VHHH", "Hong Kong Intl", 22.3089, 113.9145, 9.0, 1013.25f),
-        AirportData("KSFO", "San Francisco Intl", 37.6213, -122.3790, 4.0, 1013.25f)
+        AirportData("KSFO", "San Francisco Intl", 37.6213, -122.3790, 4.0, 1013.25f),
+        AirportData("EDDF", "Frankfurt", 50.0333, 8.5705, 111.0, 1013.25f),
+        AirportData("OMDB", "Dubai Intl", 25.2532, 55.3657, 19.0, 1013.25f),
+        AirportData("RJTT", "Tokyo Haneda", 35.5494, 139.7798, 11.0, 1013.25f),
+        AirportData("ZBAA", "Beijing Capital", 40.0799, 116.6031, 35.0, 1013.25f),
+        AirportData("SBGR", "Sao Paulo Guarulhos", -23.4356, -46.4731, 750.0, 1013.25f),
+        AirportData("FACT", "Cape Town Intl", -33.9715, 18.6021, 46.0, 1013.25f),
+        AirportData("YSSY", "Sydney Kingsford Smith", -33.9399, 151.1753, 6.0, 1013.25f)
     )
 
     init {

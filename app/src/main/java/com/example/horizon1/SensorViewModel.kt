@@ -72,9 +72,9 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     // Automatic calibration tracking
     private val accelHistory = mutableListOf<Triple<Long, FloatArray, Float>>() // timestamp, values, magnitude
     private var lastCalibrationTime: Long = 0
-    private val STABILITY_THRESHOLD = 1.50f // Loosened for non-portrait stability
-    private val CALIBRATION_SUSPENSION_MS = 5000L // Reduced for more frequent attempts
-    private val CALIBRATION_WINDOW_MS = 1000L
+    private val STABILITY_THRESHOLD = 1.50f // Vector jitter threshold (m/s^2)
+    private val CALIBRATION_SUSPENSION_MS = 5000L 
+    private val CALIBRATION_WINDOW_MS = 2000L // 2 seconds steady time
 
     // Calibration tracking
     private var gpsNorthOffset: Float? = null
@@ -266,8 +266,9 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             }
         }
         
-        // 1. Detect Flat orientation: abs(Z) > 10 * (abs(X) + abs(Y))
-        val isFlat = abs(lastRawAccel[2]) > 10 * (abs(lastRawAccel[0]) + abs(lastRawAccel[1]))
+        // 1. Detect Flat orientation: Trigger at 15 degrees from horizontal
+        // cos(15)/sin(15) ~ 3.73
+        val isFlat = abs(lastRawAccel[2]) > 3.73f * (abs(lastRawAccel[0]) + abs(lastRawAccel[1]))
 
         val fusedOrientation = getOrientationFromMatrix(fusedMatrix)
         val isCalibrated = _uiState.value.calibrationState == CalibrationState.CALIBRATED

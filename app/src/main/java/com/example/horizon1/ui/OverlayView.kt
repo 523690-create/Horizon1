@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import com.example.horizon1.CalibrationState
 import com.example.horizon1.SensorData
 import com.example.horizon1.AltimeterData
@@ -80,10 +81,11 @@ fun OverlayView(
                 // Bubble Display for Flat orientation
                 val bubbleX = centerX + (sensorData.greenBubbleX * sensitivity)
                 val bubbleY = centerY + (sensorData.greenBubbleY * sensitivity)
-                drawCircle(color = ComposeColor.Green, alpha = 0.3f, radius = 25.dp.toPx(), center = Offset(bubbleX, bubbleY))
+                // Unfilled Green Bubble
+                drawCircle(color = ComposeColor.Green, alpha = 0.5f, radius = 25.dp.toPx(), center = Offset(bubbleX, bubbleY), style = Stroke(width = 2.dp.toPx()))
                 
                 // Central bullseye
-                drawCircle(color = ComposeColor.Green, alpha = 0.15f, radius = 10.dp.toPx(), center = Offset(centerX, centerY))
+                drawCircle(color = ComposeColor.Green, alpha = 0.3f, radius = 10.dp.toPx(), center = Offset(centerX, centerY))
                 drawLine(color = ComposeColor.Green, alpha = 0.15f, start = Offset(centerX - 20.dp.toPx(), centerY), end = Offset(centerX + 20.dp.toPx(), centerY), strokeWidth = 1.dp.toPx())
                 drawLine(color = ComposeColor.Green, alpha = 0.15f, start = Offset(centerX, centerY - 20.dp.toPx()), end = Offset(centerX, centerY + 20.dp.toPx()), strokeWidth = 1.dp.toPx())
 
@@ -109,10 +111,10 @@ fun OverlayView(
             // 3. White HUD (Gyro-based)
             if (sensorData.hasBeenCalibrated) {
                 if (sensorData.isFlat) {
-                    // White Bubble
+                    // White Bubble (Unfilled)
                     val bubbleX = centerX + (sensorData.whiteBubbleX * sensitivity)
                     val bubbleY = centerY + (sensorData.whiteBubbleY * sensitivity)
-                    drawCircle(color = ComposeColor.White, alpha = 0.6f, radius = 20.dp.toPx(), center = Offset(bubbleX, bubbleY))
+                    drawCircle(color = ComposeColor.White, alpha = 0.8f, radius = 20.dp.toPx(), center = Offset(bubbleX, bubbleY), style = Stroke(width = 3.dp.toPx()))
                     
                     // True Bearing in center
                     if (sensorData.isGpsCalibrated || sensorData.isManualCalibrated) {
