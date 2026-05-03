@@ -219,6 +219,11 @@ fun OverlayView(
                 color = ComposeColor.White,
                 style = MaterialTheme.typography.titleMedium
             )
+            Text(
+                text = altimeterData.status,
+                color = ComposeColor.Gray,
+                style = MaterialTheme.typography.labelSmall
+            )
         }
 
         // 5. Airport Overlay
