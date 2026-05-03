@@ -11,9 +11,6 @@ import androidx.lifecycle.AndroidViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.time.ZoneOffset
-import java.time.ZonedDateTime
-import java.time.temporal.ChronoUnit
 import kotlin.math.*
 
 enum class CalibrationState {
@@ -37,10 +34,17 @@ data class SensorData(
     val truePitch: Float = 0f,
     val trueRoll: Float = 0f,
     val trueHeading: Float = 0f,
+    val trueHeadingString: String = "N",
+    val gpsHeading: Float? = null,
+    val gpsHeadingString: String? = null,
+    val manualHeading: Float? = null,
+    val manualHeadingString: String? = null,
     val calibrationState: CalibrationState = CalibrationState.IDLE,
-    val solarAzimuth: Double? = null,
-    val solarAltitude: Double? = null,
-    val isSunCalibrated: Boolean = false,
+    val isGpsCalibrated: Boolean = false,
+    val isManualCalibrated: Boolean = false,
+    val gpsCalibrationTime: Long = 0,
+    val manualCalibrationTime: Long = 0,
+    val hasBeenCalibrated: Boolean = false,
     val overlayAlpha: Float = 0.8f
 )
 
@@ -50,7 +54,6 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
     private val gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
-    private val linearAccel = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
 
     private val _uiState = MutableStateFlow(SensorData())
     val uiState: StateFlow<SensorData> = _uiState.asStateFlow()
@@ -59,14 +62,16 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     private var geomagnetic: FloatArray? = null
     private var lastTimestamp: Long = 0
 
-    // Stationary detection
-    private val accelWindow = mutableListOf<Float>()
-    private var stationaryStartTime: Long = 0
-    private var filteredLinearAccel = FloatArray(3)
-    private val alpha6Hz = 0.43f 
+    // Automatic calibration tracking
+    private val accelHistory = mutableListOf<Triple<Long, FloatArray, Float>>() // timestamp, values, magnitude
+    private var lastCalibrationTime: Long = 0
+    private val STABILITY_THRESHOLD = 0.98f // 0.1g in m/s^2
+    private val CALIBRATION_SUSPENSION_MS = 15000L
+    private val CALIBRATION_WINDOW_MS = 1000L
 
     // Calibration tracking
-    private var trueNorthOffset: Float? = null 
+    private var gpsNorthOffset: Float? = null
+    private var manualNorthOffset: Float? = null
     private var lastLat = 0.0
     private var lastLon = 0.0
 
@@ -81,32 +86,37 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI)
         sensorManager.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_UI)
         sensorManager.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_UI)
-        sensorManager.registerListener(this, linearAccel, SensorManager.SENSOR_DELAY_UI)
     }
 
     fun startOrientationCalibration() {
+        // This is now automatic, but we can keep it to force a reset if needed
         _uiState.value = _uiState.value.copy(
             calibrationState = CalibrationState.STATIONARY_WAIT,
-            isSunCalibrated = false
+            isGpsCalibrated = false,
+            isManualCalibrated = false,
+            gpsCalibrationTime = 0,
+            manualCalibrationTime = 0,
+            hasBeenCalibrated = false
         )
-        accelWindow.clear()
-        stationaryStartTime = 0
-        trueNorthOffset = null
+        accelHistory.clear()
+        lastCalibrationTime = 0
+        gpsNorthOffset = null
+        manualNorthOffset = null
     }
 
-    fun calibrateWithSun() {
-        if (_uiState.value.calibrationState == CalibrationState.CALIBRATED) {
-            val sunPos = calculateSolarPosition(lastLat, lastLon, ZonedDateTime.now())
+    fun calibrateWithGps(bearing: Float, speed: Float, bearingAccuracy: Float = 10f) {
+        if (speed > 2.0f && bearingAccuracy <= 4.0f) { // Only calibrate if moving and precise
             val gyroOrientation = getOrientationFromMatrix(gyroOnlyMatrix)
             
-            // Offset = SunTrueAzimuth - CurrentGyroAzimuth
-            val offset = (sunPos.azimuth.toFloat() - gyroOrientation.azimuth + 540) % 360 - 180
-            trueNorthOffset = offset
+            // Offset = GpsBearing - CurrentGyroAzimuth
+            val offset = (bearing - gyroOrientation.azimuth + 540) % 360 - 180
+            
+            // Apply a simple low-pass filter if we already have an offset
+            gpsNorthOffset = gpsNorthOffset?.let { (0.95f * it) + (0.05f * offset) } ?: offset
             
             _uiState.value = _uiState.value.copy(
-                solarAzimuth = sunPos.azimuth,
-                solarAltitude = sunPos.elevation,
-                isSunCalibrated = true
+                isGpsCalibrated = true,
+                gpsCalibrationTime = System.currentTimeMillis()
             )
         }
     }
@@ -117,10 +127,11 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             
             // Offset = LandmarkTrueBearing - CurrentGyroAzimuth
             val offset = (landmarkBearing - gyroOrientation.azimuth + 540) % 360 - 180
-            trueNorthOffset = offset
+            manualNorthOffset = offset
             
             _uiState.value = _uiState.value.copy(
-                isSunCalibrated = true // Reuse this flag to show "True" info
+                isManualCalibrated = true,
+                manualCalibrationTime = System.currentTimeMillis()
             )
         }
     }
@@ -135,10 +146,11 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         if (_uiState.value.calibrationState == CalibrationState.CALIBRATED) {
             val gyroOrientation = getOrientationFromMatrix(gyroOnlyMatrix)
             val offset = (trueHeading - gyroOrientation.azimuth + 540) % 360 - 180
-            trueNorthOffset = offset
+            manualNorthOffset = offset
             _uiState.value = _uiState.value.copy(
                 overlayAlpha = 0.8f,
-                isSunCalibrated = true
+                isManualCalibrated = true,
+                manualCalibrationTime = System.currentTimeMillis()
             )
         }
     }
@@ -153,9 +165,9 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
 
     override fun onSensorChanged(event: SensorEvent) {
         when (event.sensor.type) {
-            Sensor.TYPE_LINEAR_ACCELERATION -> handleLinearAccel(event.values)
             Sensor.TYPE_ACCELEROMETER -> {
                 gravity = if (gravity == null) event.values.clone() else applyLowPassFilter(event.values, gravity!!)
+                handleAutomaticCalibration(event.values)
             }
             Sensor.TYPE_MAGNETIC_FIELD -> {
                 geomagnetic = if (geomagnetic == null) event.values.clone() else applyLowPassFilter(event.values, geomagnetic!!)
@@ -178,23 +190,54 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         updateUiState()
     }
 
-    private fun handleLinearAccel(values: FloatArray) {
-        for (i in 0..2) filteredLinearAccel[i] = filteredLinearAccel[i] + (alpha6Hz * (values[i] - filteredLinearAccel[i]))
-        if (_uiState.value.calibrationState == CalibrationState.STATIONARY_WAIT) {
-            val magnitude = sqrt((filteredLinearAccel[0] * filteredLinearAccel[0]) + (filteredLinearAccel[1] * filteredLinearAccel[1]) + (filteredLinearAccel[2] * filteredLinearAccel[2]))
-            accelWindow.add(magnitude)
-            if (accelWindow.size > 50) accelWindow.removeAt(0)
-            if (accelWindow.size == 50) {
-                val mean = accelWindow.average().toFloat()
-                val variance = accelWindow.asSequence().map { (it - mean) * (it - mean) }.average().toFloat()
-                val stdDev = sqrt(variance)
-                if (stdDev < 0.098f) { 
-                    if (stationaryStartTime == 0L) stationaryStartTime = System.currentTimeMillis()
-                    else if ((System.currentTimeMillis() - stationaryStartTime) > 1000) {
-                        gyroOnlyMatrix = fusedMatrix.clone()
-                        _uiState.value = _uiState.value.copy(calibrationState = CalibrationState.CALIBRATED)
-                    }
-                } else stationaryStartTime = 0
+    private fun handleAutomaticCalibration(values: FloatArray) {
+        val currentTime = System.currentTimeMillis()
+        
+        // 1. Suspension check
+        if (lastCalibrationTime != 0L && (currentTime - lastCalibrationTime) < CALIBRATION_SUSPENSION_MS) {
+            accelHistory.clear()
+            return
+        }
+
+        // 2. Window management
+        val magnitude = sqrt(values[0]*values[0] + values[1]*values[1] + values[2]*values[2])
+        accelHistory.add(Triple(currentTime, values.clone(), magnitude))
+        
+        // Remove old samples
+        while (accelHistory.isNotEmpty() && (currentTime - accelHistory.first().first) > CALIBRATION_WINDOW_MS) {
+            accelHistory.removeAt(0)
+        }
+
+        // 3. Stability check (need at least 1 second of data)
+        if (accelHistory.isNotEmpty() && (currentTime - accelHistory.first().first) >= CALIBRATION_WINDOW_MS) {
+            var minMag = Float.MAX_VALUE; var maxMag = Float.MIN_VALUE
+            var minX = Float.MAX_VALUE; var maxX = Float.MIN_VALUE
+            var minY = Float.MAX_VALUE; var maxY = Float.MIN_VALUE
+            var minZ = Float.MAX_VALUE; var maxZ = Float.MIN_VALUE
+
+            for (sample in accelHistory) {
+                val m = sample.third
+                val v = sample.second
+                if (m < minMag) minMag = m; if (m > maxMag) maxMag = m
+                if (v[0] < minX) minX = v[0]; if (v[0] > maxX) maxX = v[0]
+                if (v[1] < minY) minY = v[1]; if (v[1] > maxY) maxY = v[1]
+                if (v[2] < minZ) minZ = v[2]; if (v[2] > maxZ) maxZ = v[2]
+            }
+
+            val magStable = (maxMag - minMag) <= STABILITY_THRESHOLD
+            val xStable = (maxX - minX) <= STABILITY_THRESHOLD
+            val yStable = (maxY - minY) <= STABILITY_THRESHOLD
+            val zStable = (maxZ - minZ) <= STABILITY_THRESHOLD
+
+            if (magStable && xStable && yStable && zStable) {
+                // Snap together: Copy fused (accelerometer-based) to gyroOnly
+                gyroOnlyMatrix = fusedMatrix.clone()
+                lastCalibrationTime = currentTime
+                _uiState.value = _uiState.value.copy(
+                    calibrationState = CalibrationState.CALIBRATED,
+                    hasBeenCalibrated = true
+                )
+                accelHistory.clear()
             }
         }
     }
@@ -214,10 +257,25 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         val gyroOrientation = getOrientationFromMatrix(if (isCalibrated) gyroOnlyMatrix else fusedMatrix)
 
         if (!fusedOrientation.pitch.isNaN() && !gyroOrientation.pitch.isNaN()) {
-            val currentTrueHeading = trueNorthOffset?.let { (gyroOrientation.azimuth + it + 360) % 360 }
+            val manualRecent = _uiState.value.manualCalibrationTime > _uiState.value.gpsCalibrationTime
+            val bestOffset = if (manualRecent) {
+                manualNorthOffset ?: gpsNorthOffset
+            } else {
+                gpsNorthOffset ?: manualNorthOffset
+            }
+            
+            val currentTrueHeading = bestOffset?.let { (gyroOrientation.azimuth + it + 360) % 360 }
+            val currentGpsHeading = gpsNorthOffset?.let { (gyroOrientation.azimuth + it + 360) % 360 }
+            val currentManualHeading = manualNorthOffset?.let { (gyroOrientation.azimuth + it + 360) % 360 }
+
             _uiState.value = _uiState.value.copy(
                 pitch = fusedOrientation.pitch, roll = fusedOrientation.roll, heading = fusedOrientation.azimuth, headingString = getHeadingString(fusedOrientation.azimuth),
-                truePitch = gyroOrientation.pitch, trueRoll = gyroOrientation.roll, trueHeading = currentTrueHeading ?: 0f
+                truePitch = gyroOrientation.pitch, trueRoll = gyroOrientation.roll, trueHeading = currentTrueHeading ?: 0f,
+                trueHeadingString = currentTrueHeading?.let { getHeadingString(it) } ?: "N",
+                gpsHeading = currentGpsHeading,
+                gpsHeadingString = currentGpsHeading?.let { getHeadingString(it) },
+                manualHeading = currentManualHeading,
+                manualHeadingString = currentManualHeading?.let { getHeadingString(it) }
             )
         }
     }
@@ -225,45 +283,6 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     fun addLocationData(lat: Double, lon: Double) {
         lastLat = lat; lastLon = lon
     }
-
-    private fun calculateSolarPosition(latitude: Double, longitude: Double, dateTime: ZonedDateTime): SolarPosition {
-        val utcTime = dateTime.withZoneSameInstant(ZoneOffset.UTC)
-        val epoch = ZonedDateTime.of(2000, 1, 1, 12, 0, 0, 0, ZoneOffset.UTC)
-        val daysSinceJ2000 = ChronoUnit.MILLIS.between(epoch, utcTime).toDouble() / (1000.0 * 60 * 60 * 24)
-        val t = daysSinceJ2000 / 36525.0
-
-        var l0 = 280.46646 + t * (36000.76983 + t * 0.0003032)
-        var m = 357.52911 + t * (35999.05029 - 0.0001537 * t)
-        l0 %= 360.0; m %= 360.0
-
-        val mRad = Math.toRadians(m)
-        val c = (1.914602 - t * (0.004817 + 0.000014 * t)) * sin(mRad) + (0.019993 - 0.000101 * t) * sin(2 * mRad) + 0.000289 * sin(3 * mRad)
-        val sunApparentLong = l0 + c - 0.00569 - 0.00478 * sin(Math.toRadians(125.04 - 1934.136 * t))
-
-        val epsilon0 = 23.0 + (26.0 + (21.448 - t * (46.815 + t * (0.00059 - t * 0.001813))) / 60.0) / 60.0
-        val epsilon = epsilon0 + 0.00256 * cos(Math.toRadians(125.04 - 1934.136 * t))
-
-        val declination = Math.toDegrees(asin(sin(Math.toRadians(epsilon)) * sin(Math.toRadians(sunApparentLong))))
-        val y = tan(Math.toRadians(epsilon) / 2.0).pow(2)
-        val l0Rad = Math.toRadians(l0)
-        val eqTime = 4.0 * Math.toDegrees(y * sin(2 * l0Rad) - 2.0 * 0.016708 * sin(mRad) + 4.0 * 0.016708 * y * sin(mRad) * cos(2 * l0Rad) - 0.5 * y * y * sin(4 * l0Rad) - 1.25 * 0.016708 * 0.016708 * sin(2 * mRad))
-
-        val timeInMinutes = utcTime.hour * 60.0 + utcTime.minute + utcTime.second / 60.0
-        val trueSolarTime = (timeInMinutes + eqTime + 4.0 * longitude) % 1440.0
-        val hourAngle = (if (trueSolarTime < 0) trueSolarTime + 1440.0 else trueSolarTime) / 4.0 - 180.0
-
-        val latRad = Math.toRadians(latitude); val declRad = Math.toRadians(declination); val haRad = Math.toRadians(hourAngle)
-        val zenithRad = acos(sin(latRad) * sin(declRad) + cos(latRad) * cos(declRad) * cos(haRad))
-        val elevation = 90.0 - Math.toDegrees(zenithRad)
-
-        var azimuthRad = acos(((sin(declRad) * cos(latRad)) - (cos(haRad) * cos(declRad) * sin(latRad))) / sin(zenithRad))
-        var azimuth = Math.toDegrees(azimuthRad)
-        azimuth = if (hourAngle > 0) (azimuth + 180) % 360 else (540 - azimuth) % 360
-
-        return SolarPosition(elevation, azimuth)
-    }
-
-    private data class SolarPosition(val elevation: Double, val azimuth: Double)
 
     private fun normalizeMatrix(m: FloatArray) {
         val x = floatArrayOf(m[0], m[1], m[2]); val y = floatArrayOf(m[3], m[4], m[5])
@@ -278,17 +297,47 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     }
 
     private fun getOrientationFromMatrix(matrix: FloatArray): Orientation {
-        val remappedR = FloatArray(9)
+        // 1. Account for display rotation by remapping the coordinate system
+        // such that X is Screen Right, Y is Screen Top, Z is Screen Out (towards user).
+        val remapped = FloatArray(9)
         when (displayRotation) {
-            android.view.Surface.ROTATION_0 -> SensorManager.remapCoordinateSystem(matrix, SensorManager.AXIS_X, SensorManager.AXIS_Z, remappedR)
-            android.view.Surface.ROTATION_90 -> SensorManager.remapCoordinateSystem(matrix, SensorManager.AXIS_Z, SensorManager.AXIS_MINUS_X, remappedR)
-            android.view.Surface.ROTATION_180 -> SensorManager.remapCoordinateSystem(matrix, SensorManager.AXIS_MINUS_X, SensorManager.AXIS_MINUS_Z, remappedR)
-            android.view.Surface.ROTATION_270 -> SensorManager.remapCoordinateSystem(matrix, SensorManager.AXIS_MINUS_Z, SensorManager.AXIS_X, remappedR)
-            else -> SensorManager.remapCoordinateSystem(matrix, SensorManager.AXIS_X, SensorManager.AXIS_Z, remappedR)
+            android.view.Surface.ROTATION_0 -> SensorManager.remapCoordinateSystem(matrix, SensorManager.AXIS_X, SensorManager.AXIS_Y, remapped)
+            android.view.Surface.ROTATION_90 -> SensorManager.remapCoordinateSystem(matrix, SensorManager.AXIS_Y, SensorManager.AXIS_MINUS_X, remapped)
+            android.view.Surface.ROTATION_180 -> SensorManager.remapCoordinateSystem(matrix, SensorManager.AXIS_MINUS_X, SensorManager.AXIS_MINUS_Y, remapped)
+            android.view.Surface.ROTATION_270 -> SensorManager.remapCoordinateSystem(matrix, SensorManager.AXIS_MINUS_Y, SensorManager.AXIS_X, remapped)
+            else -> matrix.copyInto(remapped)
         }
-        val orientation = FloatArray(3)
-        SensorManager.getOrientation(remappedR, orientation)
-        return Orientation((Math.toDegrees(orientation[0].toDouble()).toFloat() + 360) % 360, Math.toDegrees(orientation[1].toDouble()).toFloat(), Math.toDegrees(orientation[2].toDouble()).toFloat())
+
+        // Camera Forward Vf (pointing out the back) is Screen -Z.
+        // Vf_world = R_remapped * [0, 0, -1] = [-R[2], -R[5], -R[8]]
+        val vfx = -remapped[2]
+        val vfy = -remapped[5]
+        val vfz = -remapped[8]
+        
+        // Pitch: Angle between Vf and ground plane. Positive = Up.
+        val pitch = Math.toDegrees(asin(vfz.toDouble())).toFloat()
+        
+        val azimuth: Float
+        val roll: Float
+        
+        // Check for vertical orientation (gimbal lock) where Screen Forward is parallel to World Z
+        if (abs(vfz) > 0.99f) { 
+            // Looking straight down or up. Azimuth is defined by Screen Top (Dy).
+            azimuth = (Math.toDegrees(atan2(remapped[1].toDouble(), remapped[4].toDouble())).toFloat() + 360) % 360
+            roll = 0f
+        } else {
+            // Azimuth: Bearing of Screen Forward projection on ground
+            azimuth = (Math.toDegrees(atan2(vfx.toDouble(), vfy.toDouble())).toFloat() + 360) % 360
+            
+            // Roll: Rotation of device around Screen Forward.
+            // Project World Up [0,0,1] onto Screen XY plane.
+            // Component along Screen X = remapped[6]
+            // Component along Screen Y = remapped[7]
+            // Positive roll is counter-clockwise (tilt top-left).
+            roll = Math.toDegrees(atan2(remapped[6].toDouble(), remapped[7].toDouble())).toFloat()
+        }
+        
+        return Orientation(azimuth, pitch, roll)
     }
 
     private fun getDeltaRotation(gyroValues: FloatArray, dt: Float): FloatArray {

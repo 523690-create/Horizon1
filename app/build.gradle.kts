@@ -39,15 +39,18 @@ android {
     }
 }
 
-tasks.register<Copy>("copyApkToRoot") {
+tasks.register("copyApkToRoot") {
     dependsOn("assembleDebug")
-    doNotTrackState("Copying to root is not incremental")
-    from(layout.buildDirectory.dir("outputs/apk/debug"))
-    include("app-debug.apk")
-    into(project.rootProject.projectDir.path + "/apks")
-    rename {
+    doLast {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
-        "Horizon1_$timestamp.apk"
+        val sourceFile = file("${layout.buildDirectory.get()}/outputs/apk/debug/app-debug.apk")
+        val destinationFile = file("${project.rootProject.projectDir.path}/Horizon1_$timestamp.apk")
+        if (sourceFile.exists()) {
+            sourceFile.copyTo(destinationFile, overwrite = true)
+            println("APK copied to: ${destinationFile.path}")
+        } else {
+            println("Source APK not found: ${sourceFile.path}")
+        }
     }
 }
 

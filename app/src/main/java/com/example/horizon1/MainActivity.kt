@@ -68,12 +68,19 @@ class MainActivity : ComponentActivity() {
             }
             sensorViewModel.setDisplayRotation(rotation)
 
-            // Feed location for solar calculation
+            // Feed location for GPS calibration and refinement
             LaunchedEffect(locationData) {
                 sensorViewModel.addLocationData(
                     locationData.latitude,
                     locationData.longitude,
                 )
+                if (locationData.hasMovement) {
+                    sensorViewModel.calibrateWithGps(
+                        locationData.bearing,
+                        locationData.speed,
+                        locationData.bearingAccuracy
+                    )
+                }
             }
 
             Box(modifier = Modifier.fillMaxSize()) {
@@ -135,17 +142,6 @@ class MainActivity : ComponentActivity() {
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.Bottom,
                 ) {
-                    Button(onClick = { sensorViewModel.startOrientationCalibration() }) {
-                        Text("ORIENTATION")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = { sensorViewModel.calibrateWithSun() },
-                        enabled = sensorData.calibrationState == CalibrationState.CALIBRATED
-                    ) {
-                        Text("SUN")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
                     if (sensorData.overlayAlpha > 0.5f) {
                         Button(
                             onClick = { sensorViewModel.captureManualOrientation() },
