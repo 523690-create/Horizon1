@@ -44,6 +44,11 @@ data class SensorData(
     val isManualCalibrated: Boolean = false,
     val gpsCalibrationTime: Long = 0,
     val manualCalibrationTime: Long = 0,
+    val isFlat: Boolean = false,
+    val greenBubbleX: Float = 0f,
+    val greenBubbleY: Float = 0f,
+    val whiteBubbleX: Float = 0f,
+    val whiteBubbleY: Float = 0f,
     val hasBeenCalibrated: Boolean = false,
     val overlayAlpha: Float = 0.8f
 )
@@ -74,11 +79,17 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     private var manualNorthOffset: Float? = null
     private var lastLat = 0.0
     private var lastLon = 0.0
+    private var lastRawAccel = FloatArray(3)
 
     // Rotation matrices
     private var fusedMatrix = FloatArray(9) { if ((it % 4) == 0) 1f else 0f }
     private var gyroOnlyMatrix = FloatArray(9) { if ((it % 4) == 0) 1f else 0f }
     private var displayRotation: Int = android.view.Surface.ROTATION_0
+
+    // Filtered true orientation
+    private var filteredTruePitch = 0f
+    private var filteredTrueRoll = 0f
+    private var filteredTrueAzimuth = 0f
 
     private val alpha = 0.1f
 
@@ -166,6 +177,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     override fun onSensorChanged(event: SensorEvent) {
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> {
+                lastRawAccel = event.values.clone()
                 gravity = if (gravity == null) event.values.clone() else applyLowPassFilter(event.values, gravity!!)
                 handleAutomaticCalibration(event.values)
             }
@@ -210,26 +222,24 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
 
         // 3. Stability check (need at least 1 second of data)
         if (accelHistory.isNotEmpty() && (currentTime - accelHistory.first().first) >= CALIBRATION_WINDOW_MS) {
-            var minMag = Float.MAX_VALUE; var maxMag = Float.MIN_VALUE
-            var minX = Float.MAX_VALUE; var maxX = Float.MIN_VALUE
-            var minY = Float.MAX_VALUE; var maxY = Float.MIN_VALUE
-            var minZ = Float.MAX_VALUE; var maxZ = Float.MIN_VALUE
-
+            // Calculate average vector
+            var avgX = 0f; var avgY = 0f; var avgZ = 0f
             for (sample in accelHistory) {
-                val m = sample.third
-                val v = sample.second
-                if (m < minMag) minMag = m; if (m > maxMag) maxMag = m
-                if (v[0] < minX) minX = v[0]; if (v[0] > maxX) maxX = v[0]
-                if (v[1] < minY) minY = v[1]; if (v[1] > maxY) maxY = v[1]
-                if (v[2] < minZ) minZ = v[2]; if (v[2] > maxZ) maxZ = v[2]
+                avgX += sample.second[0]; avgY += sample.second[1]; avgZ += sample.second[2]
+            }
+            avgX /= accelHistory.size; avgY /= accelHistory.size; avgZ /= accelHistory.size
+
+            // Calculate max deviation from average (Vector Jitter)
+            var maxDevSq = 0f
+            for (sample in accelHistory) {
+                val dx = sample.second[0] - avgX; val dy = sample.second[1] - avgY; val dz = sample.second[2] - avgZ
+                val devSq = dx*dx + dy*dy + dz*dz
+                if (devSq > maxDevSq) maxDevSq = devSq
             }
 
-            val magStable = (maxMag - minMag) <= STABILITY_THRESHOLD
-            val xStable = (maxX - minX) <= STABILITY_THRESHOLD
-            val yStable = (maxY - minY) <= STABILITY_THRESHOLD
-            val zStable = (maxZ - minZ) <= STABILITY_THRESHOLD
-
-            if (magStable && xStable && yStable && zStable) {
+            // If the maximum vector deviation is within threshold, device is stationary
+            // Threshold is squared here for efficiency: 0.1g ~ 0.98 m/s^2 -> 0.98^2 ~ 0.96
+            if (maxDevSq <= (STABILITY_THRESHOLD * STABILITY_THRESHOLD)) {
                 // Snap together: Copy fused (accelerometer-based) to gyroOnly
                 gyroOnlyMatrix = fusedMatrix.clone()
                 lastCalibrationTime = currentTime
@@ -252,6 +262,10 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
                 normalizeMatrix(fusedMatrix)
             }
         }
+        
+        // 1. Detect Flat orientation: abs(Z) > 10 * (abs(X) + abs(Y))
+        val isFlat = abs(lastRawAccel[2]) > 10 * (abs(lastRawAccel[0]) + abs(lastRawAccel[1]))
+
         val fusedOrientation = getOrientationFromMatrix(fusedMatrix)
         val isCalibrated = _uiState.value.calibrationState == CalibrationState.CALIBRATED
         val gyroOrientation = getOrientationFromMatrix(if (isCalibrated) gyroOnlyMatrix else fusedMatrix)
@@ -264,18 +278,37 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
                 gpsNorthOffset ?: manualNorthOffset
             }
             
-            val currentTrueHeading = bestOffset?.let { (gyroOrientation.azimuth + it + 360) % 360 }
             val currentGpsHeading = gpsNorthOffset?.let { (gyroOrientation.azimuth + it + 360) % 360 }
             val currentManualHeading = manualNorthOffset?.let { (gyroOrientation.azimuth + it + 360) % 360 }
 
+            // Apply low-pass filter to true orientation elements
+            filteredTruePitch = filteredTruePitch + alpha * (gyroOrientation.pitch - filteredTruePitch)
+            filteredTrueRoll = filteredTrueRoll + alpha * (gyroOrientation.roll - filteredTrueRoll)
+            
+            // For azimuth, we need to handle wrapping correctly
+            val azDiff = (gyroOrientation.azimuth - filteredTrueAzimuth + 540) % 360 - 180
+            filteredTrueAzimuth = (filteredTrueAzimuth + alpha * azDiff + 360) % 360
+
+            val currentTrueHeading = bestOffset?.let { (filteredTrueAzimuth + it + 360) % 360 }
+
+            // Bubble offsets: Projected World Z onto Device XY
+            val gBX = Math.toDegrees(asin(fusedMatrix[6].toDouble())).toFloat()
+            val gBY = Math.toDegrees(asin(fusedMatrix[7].toDouble())).toFloat()
+            val currentGyroMatrix = if (isCalibrated) gyroOnlyMatrix else fusedMatrix
+            val wBX = Math.toDegrees(asin(currentGyroMatrix[6].toDouble())).toFloat()
+            val wBY = Math.toDegrees(asin(currentGyroMatrix[7].toDouble())).toFloat()
+
             _uiState.value = _uiState.value.copy(
                 pitch = fusedOrientation.pitch, roll = fusedOrientation.roll, heading = fusedOrientation.azimuth, headingString = getHeadingString(fusedOrientation.azimuth),
-                truePitch = gyroOrientation.pitch, trueRoll = gyroOrientation.roll, trueHeading = currentTrueHeading ?: 0f,
+                truePitch = filteredTruePitch, trueRoll = filteredTrueRoll, trueHeading = currentTrueHeading ?: 0f,
                 trueHeadingString = currentTrueHeading?.let { getHeadingString(it) } ?: "N",
                 gpsHeading = currentGpsHeading,
                 gpsHeadingString = currentGpsHeading?.let { getHeadingString(it) },
                 manualHeading = currentManualHeading,
-                manualHeadingString = currentManualHeading?.let { getHeadingString(it) }
+                manualHeadingString = currentManualHeading?.let { getHeadingString(it) },
+                isFlat = isFlat,
+                greenBubbleX = gBX, greenBubbleY = gBY,
+                whiteBubbleX = wBX, whiteBubbleY = wBY
             )
         }
     }
