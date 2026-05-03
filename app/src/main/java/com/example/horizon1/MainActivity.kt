@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
 
     private val sensorViewModel: SensorViewModel by viewModels()
     private val locationViewModel: LocationViewModel by viewModels()
+    private val altimeterViewModel: AltimeterViewModel by viewModels()
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -55,6 +56,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val sensorData by sensorViewModel.uiState.collectAsStateWithLifecycle()
             val locationData by locationViewModel.locationState.collectAsStateWithLifecycle()
+            val altimeterData by altimeterViewModel.uiState.collectAsStateWithLifecycle()
             val context = LocalContext.current
             var showManualDialog by remember { mutableStateOf(false) }
             var manualHeadingInput by remember { mutableStateOf("") }
@@ -74,6 +76,10 @@ class MainActivity : ComponentActivity() {
                     locationData.latitude,
                     locationData.longitude,
                 )
+                altimeterViewModel.updateLocation(
+                    locationData.latitude,
+                    locationData.longitude
+                )
                 if (locationData.hasMovement) {
                     sensorViewModel.calibrateWithGps(
                         locationData.bearing,
@@ -85,7 +91,11 @@ class MainActivity : ComponentActivity() {
 
             Box(modifier = Modifier.fillMaxSize()) {
                 CameraPreview()
-                OverlayView(sensorData = sensorData)
+                OverlayView(
+                    sensorData = sensorData,
+                    altimeterData = altimeterData,
+                    onAltimeterClick = { altimeterViewModel.toggleDetail() }
+                )
 
                 if (showManualDialog) {
                     AlertDialog(

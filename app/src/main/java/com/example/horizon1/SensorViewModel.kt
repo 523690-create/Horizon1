@@ -23,6 +23,7 @@ data class Orientation(
     val azimuth: Float,
     val pitch: Float,
     val roll: Float,
+    val fullPitch: Float = 0f // -180 to 180 for continuous vertical line
 )
 
 @Immutable
@@ -33,6 +34,7 @@ data class SensorData(
     val headingString: String = "N",
     val truePitch: Float = 0f,
     val trueRoll: Float = 0f,
+    val trueFullPitch: Float = 0f,
     val trueHeading: Float = 0f,
     val trueHeadingString: String = "N",
     val gpsHeading: Float? = null,
@@ -70,8 +72,8 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     // Automatic calibration tracking
     private val accelHistory = mutableListOf<Triple<Long, FloatArray, Float>>() // timestamp, values, magnitude
     private var lastCalibrationTime: Long = 0
-    private val STABILITY_THRESHOLD = 0.98f // 0.1g in m/s^2
-    private val CALIBRATION_SUSPENSION_MS = 15000L
+    private val STABILITY_THRESHOLD = 1.50f // Loosened for non-portrait stability
+    private val CALIBRATION_SUSPENSION_MS = 5000L // Reduced for more frequent attempts
     private val CALIBRATION_WINDOW_MS = 1000L
 
     // Calibration tracking
@@ -90,6 +92,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     private var filteredTruePitch = 0f
     private var filteredTrueRoll = 0f
     private var filteredTrueAzimuth = 0f
+    private var filteredTrueFullPitch = 0f
 
     private val alpha = 0.1f
 
@@ -284,6 +287,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             // Apply low-pass filter to true orientation elements
             filteredTruePitch = filteredTruePitch + alpha * (gyroOrientation.pitch - filteredTruePitch)
             filteredTrueRoll = filteredTrueRoll + alpha * (gyroOrientation.roll - filteredTrueRoll)
+            filteredTrueFullPitch = filteredTrueFullPitch + alpha * (gyroOrientation.fullPitch - filteredTrueFullPitch)
             
             // For azimuth, we need to handle wrapping correctly
             val azDiff = (gyroOrientation.azimuth - filteredTrueAzimuth + 540) % 360 - 180
@@ -300,7 +304,8 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
 
             _uiState.value = _uiState.value.copy(
                 pitch = fusedOrientation.pitch, roll = fusedOrientation.roll, heading = fusedOrientation.azimuth, headingString = getHeadingString(fusedOrientation.azimuth),
-                truePitch = filteredTruePitch, trueRoll = filteredTrueRoll, trueHeading = currentTrueHeading ?: 0f,
+                truePitch = filteredTruePitch, trueRoll = filteredTrueRoll, trueFullPitch = filteredTrueFullPitch,
+                trueHeading = currentTrueHeading ?: 0f,
                 trueHeadingString = currentTrueHeading?.let { getHeadingString(it) } ?: "N",
                 gpsHeading = currentGpsHeading,
                 gpsHeadingString = currentGpsHeading?.let { getHeadingString(it) },
@@ -352,12 +357,14 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         
         val azimuth: Float
         val roll: Float
+        val fullPitch: Float
         
         // Check for vertical orientation (gimbal lock) where Screen Forward is parallel to World Z
         if (abs(vfz) > 0.99f) { 
             // Looking straight down or up. Azimuth is defined by Screen Top (Dy).
             azimuth = (Math.toDegrees(atan2(remapped[1].toDouble(), remapped[4].toDouble())).toFloat() + 360) % 360
             roll = 0f
+            fullPitch = pitch
         } else {
             // Azimuth: Bearing of Screen Forward projection on ground
             azimuth = (Math.toDegrees(atan2(vfx.toDouble(), vfy.toDouble())).toFloat() + 360) % 360
@@ -368,9 +375,16 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             // Component along Screen Y = remapped[7]
             // Positive roll is counter-clockwise (tilt top-left).
             roll = Math.toDegrees(atan2(remapped[6].toDouble(), remapped[7].toDouble())).toFloat()
+            
+            // fullPitch: handle turnover. If inverted (abs(roll) > 90), pitch is "behind"
+            fullPitch = if (abs(roll) > 90f) {
+                if (pitch > 0) 180f - pitch else -180f - pitch
+            } else {
+                pitch
+            }
         }
         
-        return Orientation(azimuth, pitch, roll)
+        return Orientation(azimuth, pitch, roll, fullPitch)
     }
 
     private fun getDeltaRotation(gyroValues: FloatArray, dt: Float): FloatArray {

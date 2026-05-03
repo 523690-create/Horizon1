@@ -6,21 +6,29 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color as ComposeColor
 import com.example.horizon1.CalibrationState
 import com.example.horizon1.SensorData
+import com.example.horizon1.AltimeterData
 import android.graphics.Paint
 import android.graphics.Typeface
 import kotlin.math.abs
-import kotlin.math.cos
 
 @Composable
 fun OverlayView(
     sensorData: SensorData,
+    altimeterData: AltimeterData = AltimeterData(),
+    onAltimeterClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -47,147 +55,201 @@ fun OverlayView(
     val promptPaint = remember(density) {
         Paint().apply {
             color = android.graphics.Color.WHITE
-            textSize = with(density) { 16.dp.toPx() } // Much smaller as requested
+            textSize = with(density) { 16.dp.toPx() }
             typeface = Typeface.DEFAULT_BOLD
             textAlign = Paint.Align.CENTER
         }
     }
 
-    Canvas(modifier = modifier.fillMaxSize()) {
-        val width = size.width
-        val height = size.height
-        val centerX = width / 2
-        val centerY = height / 2
-        
-        val vFov = 60f // Assumed Vertical FOV for matching camera optics
-        val sensitivity = height / vFov
-
-        // 1. Dynamic opaque black overlay
-        drawRect(color = Color.Black, alpha = sensorData.overlayAlpha, size = size)
-
-        // 2. Green Layer (Fused)
-        val barThickness = width * 0.05f
-        if (sensorData.isFlat) {
-            // Bubble Display for Flat orientation
-            val bubbleX = centerX + (sensorData.greenBubbleX * sensitivity)
-            val bubbleY = centerY + (sensorData.greenBubbleY * sensitivity)
-            drawCircle(color = Color.Green, alpha = 0.3f, radius = 25.dp.toPx(), center = Offset(bubbleX, bubbleY))
+    Box(modifier = modifier.fillMaxSize()) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val width = size.width
+            val height = size.height
+            val centerX = width / 2
+            val centerY = height / 2
             
-            // Central bullseye
-            drawCircle(color = Color.Green, alpha = 0.15f, radius = 10.dp.toPx(), center = Offset(centerX, centerY))
-            drawLine(color = Color.Green, alpha = 0.15f, start = Offset(centerX - 20.dp.toPx(), centerY), end = Offset(centerX + 20.dp.toPx(), centerY), strokeWidth = 1.dp.toPx())
-            drawLine(color = Color.Green, alpha = 0.15f, start = Offset(centerX, centerY - 20.dp.toPx()), end = Offset(centerX, centerY + 20.dp.toPx()), strokeWidth = 1.dp.toPx())
+            val vFov = 60f 
+            val sensitivity = height / vFov
 
-            // MAG text in center
-            val magText = "MAG: ${sensorData.headingString}"
-            drawContext.canvas.nativeCanvas.drawText(magText, centerX, centerY + 50.dp.toPx(), Paint(textPaintYellow).apply { textAlign = Paint.Align.CENTER })
-        } else {
-            // Normal Line Display
-            rotate(degrees = sensorData.roll, pivot = Offset(centerX, centerY)) {
-                val horizonY = centerY + (sensorData.pitch * sensitivity)
-                
-                drawRect(color = Color.Green, alpha = 0.20f, topLeft = Offset(-width * 2, horizonY - (barThickness / 2)), size = androidx.compose.ui.geometry.Size(width * 5, barThickness))
-                drawRect(color = Color.Green, alpha = 0.20f, topLeft = Offset(centerX - (barThickness / 2), -height * 2), size = androidx.compose.ui.geometry.Size(barThickness, height * 5))
-                drawCircle(color = Color.Yellow, alpha = 0.11f, radius = barThickness, center = Offset(centerX, horizonY))
+            // 1. Dynamic opaque black overlay
+            drawRect(color = ComposeColor.Black, alpha = sensorData.overlayAlpha, size = size)
 
-                // MAG text: Left justified along horizontal green line
-                val magText = "MAG: ${sensorData.headingString}"
-                val magDrawY = (horizonY - (barThickness / 2) - 5f).coerceIn(20.dp.toPx(), height - 20.dp.toPx())
-                drawContext.canvas.nativeCanvas.drawText(magText, 10.dp.toPx(), magDrawY, textPaintYellow)
-            }
-        }
-
-        // 3. White HUD (Gyro-based)
-        if (sensorData.hasBeenCalibrated) {
+            // 2. Green Layer (Fused)
+            val barThickness = width * 0.05f
             if (sensorData.isFlat) {
-                // White Bubble
-                val bubbleX = centerX + (sensorData.whiteBubbleX * sensitivity)
-                val bubbleY = centerY + (sensorData.whiteBubbleY * sensitivity)
-                drawCircle(color = Color.White, alpha = 0.6f, radius = 20.dp.toPx(), center = Offset(bubbleX, bubbleY))
+                // Bubble Display for Flat orientation
+                val bubbleX = centerX + (sensorData.greenBubbleX * sensitivity)
+                val bubbleY = centerY + (sensorData.greenBubbleY * sensitivity)
+                drawCircle(color = ComposeColor.Green, alpha = 0.3f, radius = 25.dp.toPx(), center = Offset(bubbleX, bubbleY))
                 
-                // True Bearing in center
-                if (sensorData.isGpsCalibrated || sensorData.isManualCalibrated) {
-                    val paint = Paint(textPaintWhite).apply { 
-                        textAlign = Paint.Align.CENTER 
-                        textSize = with(density) { 24.dp.toPx() }
-                    }
-                    drawContext.canvas.nativeCanvas.drawText(sensorData.trueHeadingString, centerX, centerY - 40.dp.toPx(), paint)
-                }
+                // Central bullseye
+                drawCircle(color = ComposeColor.Green, alpha = 0.15f, radius = 10.dp.toPx(), center = Offset(centerX, centerY))
+                drawLine(color = ComposeColor.Green, alpha = 0.15f, start = Offset(centerX - 20.dp.toPx(), centerY), end = Offset(centerX + 20.dp.toPx(), centerY), strokeWidth = 1.dp.toPx())
+                drawLine(color = ComposeColor.Green, alpha = 0.15f, start = Offset(centerX, centerY - 20.dp.toPx()), end = Offset(centerX, centerY + 20.dp.toPx()), strokeWidth = 1.dp.toPx())
+
+                // MAG text in center
+                val magText = "MAG: ${sensorData.headingString}"
+                drawContext.canvas.nativeCanvas.drawText(magText, centerX, centerY + 50.dp.toPx(), Paint(textPaintYellow).apply { textAlign = Paint.Align.CENTER })
             } else {
-                rotate(degrees = sensorData.trueRoll, pivot = Offset(centerX, centerY)) {
-                    val trueY = centerY + (sensorData.truePitch * sensitivity)
+                // Normal Line Display
+                rotate(degrees = sensorData.roll, pivot = Offset(centerX, centerY)) {
+                    val horizonY = centerY + (sensorData.pitch * sensitivity)
                     
-                    // Horizontal line (Full 360 degree representation)
-                    drawLine(color = Color.White, alpha = 0.90f, start = Offset(-width * 2, trueY), end = Offset(width * 5, trueY), strokeWidth = 2.dp.toPx())
+                    drawRect(color = ComposeColor.Green, alpha = 0.20f, topLeft = Offset(-width * 2, horizonY - (barThickness / 2)), size = androidx.compose.ui.geometry.Size(width * 5, barThickness))
+                    drawRect(color = ComposeColor.Green, alpha = 0.20f, topLeft = Offset(centerX - (barThickness / 2), -height * 2), size = androidx.compose.ui.geometry.Size(barThickness, height * 5))
+                    drawCircle(color = ComposeColor.Yellow, alpha = 0.11f, radius = barThickness, center = Offset(centerX, horizonY))
+
+                    // MAG text: Left justified along horizontal green line
+                    val magText = "MAG: ${sensorData.headingString}"
+                    val magDrawY = (horizonY - (barThickness / 2) - 5f).coerceIn(20.dp.toPx(), height - 20.dp.toPx())
+                    drawContext.canvas.nativeCanvas.drawText(magText, 10.dp.toPx(), magDrawY, textPaintYellow)
+                }
+            }
+
+            // 3. White HUD (Gyro-based)
+            if (sensorData.hasBeenCalibrated) {
+                if (sensorData.isFlat) {
+                    // White Bubble
+                    val bubbleX = centerX + (sensorData.whiteBubbleX * sensitivity)
+                    val bubbleY = centerY + (sensorData.whiteBubbleY * sensitivity)
+                    drawCircle(color = ComposeColor.White, alpha = 0.6f, radius = 20.dp.toPx(), center = Offset(bubbleX, bubbleY))
                     
-                    // Horizontal Ticks (every 10 degrees)
-                    for (angle in 0 until 360 step 10) {
-                        val delta = (angle - sensorData.trueHeading + 540) % 360 - 180
-                        val tickX = centerX + (delta * sensitivity)
-                        if (tickX in -width..width * 2) {
-                            drawLine(color = Color.White, alpha = 0.90f, start = Offset(tickX, trueY - 10.dp.toPx()), end = Offset(tickX, trueY + 10.dp.toPx()), strokeWidth = 2.dp.toPx())
-                            
-                            if (sensorData.isGpsCalibrated || sensorData.isManualCalibrated) {
-                                rotate(degrees = -sensorData.trueRoll, pivot = Offset(tickX, trueY - 15.dp.toPx())) {
-                                    drawContext.canvas.nativeCanvas.drawText("$angle", tickX, trueY - 15.dp.toPx(), promptPaint)
+                    // True Bearing in center
+                    if (sensorData.isGpsCalibrated || sensorData.isManualCalibrated) {
+                        val paint = Paint(textPaintWhite).apply { 
+                            textAlign = Paint.Align.CENTER 
+                            textSize = with(density) { 24.dp.toPx() }
+                        }
+                        drawContext.canvas.nativeCanvas.drawText(sensorData.trueHeadingString, centerX, centerY - 40.dp.toPx(), paint)
+                    }
+                } else {
+                    rotate(degrees = sensorData.trueRoll, pivot = Offset(centerX, centerY)) {
+                        val trueY = centerY + (sensorData.truePitch * sensitivity)
+                        
+                        // Horizontal line
+                        drawLine(color = ComposeColor.White, alpha = 0.90f, start = Offset(-width * 2, trueY), end = Offset(width * 5, trueY), strokeWidth = 2.dp.toPx())
+                        
+                        // Horizontal Ticks (every 10 degrees)
+                        for (angle in 0 until 360 step 10) {
+                            val delta = (angle - sensorData.trueHeading + 540) % 360 - 180
+                            val tickX = centerX + (delta * sensitivity)
+                            if (tickX in -width..width * 2) {
+                                drawLine(color = ComposeColor.White, alpha = 0.90f, start = Offset(tickX, trueY - 10.dp.toPx()), end = Offset(tickX, trueY + 10.dp.toPx()), strokeWidth = 2.dp.toPx())
+                                
+                                if (sensorData.isGpsCalibrated || sensorData.isManualCalibrated) {
+                                    rotate(degrees = -sensorData.trueRoll, pivot = Offset(tickX, trueY - 15.dp.toPx())) {
+                                        drawContext.canvas.nativeCanvas.drawText("$angle", tickX, trueY - 15.dp.toPx(), promptPaint)
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // Vertical line
-                    drawLine(color = Color.White, alpha = 0.90f, start = Offset(centerX, -height * 2), end = Offset(centerX, height * 5), strokeWidth = 2.dp.toPx())
-                    
-                    // Persistent Center Bearing: Left of the vertical axis. Display ONLY if calibrated.
-                    if (sensorData.isGpsCalibrated || sensorData.isManualCalibrated) {
-                        rotate(degrees = -sensorData.trueRoll, pivot = Offset(centerX - 15.dp.toPx(), centerY)) {
-                            val paint = Paint(textPaintWhite).apply { 
-                                textAlign = Paint.Align.RIGHT 
-                                textSize = with(density) { 20.dp.toPx() }
-                            }
-                            drawContext.canvas.nativeCanvas.drawText(sensorData.trueHeadingString, centerX - 15.dp.toPx(), centerY + 7.dp.toPx(), paint)
-                        }
-                    }
-
-                    // Vertical Ticks (every 15 degrees)
-                    for (pitch in -90..90 step 15) {
-                        val delta = pitch - sensorData.truePitch
-                        val tickY = centerY - (delta * sensitivity)
-                        if (tickY in -height..height * 2) {
-                            drawLine(color = Color.White, alpha = 0.90f, start = Offset(centerX - 10.dp.toPx(), tickY), end = Offset(centerX + 10.dp.toPx(), tickY), strokeWidth = 2.dp.toPx())
-                            
-                            rotate(degrees = -sensorData.trueRoll, pivot = Offset(centerX + 60.dp.toPx(), tickY + 5.dp.toPx())) {
-                                drawContext.canvas.nativeCanvas.drawText("$pitch", centerX + 60.dp.toPx(), tickY + 5.dp.toPx(), textPaintWhite)
+                        // Vertical line
+                        drawLine(color = ComposeColor.White, alpha = 0.90f, start = Offset(centerX, -height * 2), end = Offset(centerX, height * 5), strokeWidth = 2.dp.toPx())
+                        
+                        // Persistent Center Bearing: Left of vertical axis
+                        if (sensorData.isGpsCalibrated || sensorData.isManualCalibrated) {
+                            rotate(degrees = -sensorData.trueRoll, pivot = Offset(centerX - 15.dp.toPx(), centerY)) {
+                                val paint = Paint(textPaintWhite).apply { 
+                                    textAlign = Paint.Align.RIGHT 
+                                    textSize = with(density) { 20.dp.toPx() }
+                                }
+                                drawContext.canvas.nativeCanvas.drawText(sensorData.trueHeadingString, centerX - 15.dp.toPx(), centerY + 7.dp.toPx(), paint)
                             }
                         }
-                    }
-                    
-                    // True HUD Labels: 
-                    // GPS above white line, Manual below. Display all available, prioritize recent.
-                    val manualRecent = sensorData.manualCalibrationTime > sensorData.gpsCalibrationTime
-                    val gpsAlpha = if (!manualRecent || !sensorData.isManualCalibrated) 0.90f else 0.50f
-                    val manualAlpha = if (manualRecent || !sensorData.isGpsCalibrated) 0.90f else 0.50f
 
-                    if (sensorData.isGpsCalibrated) {
-                        val trueText = "True (GPS): ${sensorData.gpsHeadingString}"
-                        val paint = Paint(textPaintWhite).apply { alpha = (255 * gpsAlpha).toInt() }
-                        drawContext.canvas.nativeCanvas.drawText(trueText, width - 10.dp.toPx(), trueY - 15.dp.toPx(), paint)
+                        // Vertical Ticks (every 15 degrees)
+                        for (pitch in -180..180 step 15) {
+                            val delta = pitch - sensorData.trueFullPitch
+                            val tickY = centerY + (delta * sensitivity)
+                            if (tickY in -height..height * 2) {
+                                drawLine(color = ComposeColor.White, alpha = 0.90f, start = Offset(centerX - 10.dp.toPx(), tickY), end = Offset(centerX + 10.dp.toPx(), tickY), strokeWidth = 2.dp.toPx())
+                                
+                                rotate(degrees = -sensorData.trueRoll, pivot = Offset(centerX + 60.dp.toPx(), tickY + 5.dp.toPx())) {
+                                    val label = if (pitch > 90) 180 - pitch else if (pitch < -90) -180 - pitch else pitch
+                                    drawContext.canvas.nativeCanvas.drawText("${label.toInt()}", centerX + 60.dp.toPx(), tickY + 5.dp.toPx(), textPaintWhite)
+                                }
+                            }
+                        }
+                        
+                        // Recency prioritization
+                        val manualRecent = sensorData.manualCalibrationTime > sensorData.gpsCalibrationTime
+                        val gpsAlpha = if (!manualRecent || !sensorData.isManualCalibrated) 0.90f else 0.50f
+                        val manualAlpha = if (manualRecent || !sensorData.isGpsCalibrated) 0.90f else 0.50f
+
+                        if (sensorData.isGpsCalibrated) {
+                            val trueText = "True (GPS): ${sensorData.gpsHeadingString}"
+                            val paint = Paint(textPaintWhite).apply { alpha = (255 * gpsAlpha).toInt() }
+                            drawContext.canvas.nativeCanvas.drawText(trueText, width - 10.dp.toPx(), trueY - 15.dp.toPx(), paint)
+                        }
+                        if (sensorData.isManualCalibrated) {
+                            val trueText = "True (manual): ${sensorData.manualHeadingString}"
+                            val paint = Paint(textPaintWhite).apply { alpha = (255 * manualAlpha).toInt() }
+                            drawContext.canvas.nativeCanvas.drawText(trueText, width - 10.dp.toPx(), trueY + 25.dp.toPx(), paint)
+                        }
                     }
-                    if (sensorData.isManualCalibrated) {
-                        val trueText = "True (manual): ${sensorData.manualHeadingString}"
-                        val paint = Paint(textPaintWhite).apply { alpha = (255 * manualAlpha).toInt() }
-                        drawContext.canvas.nativeCanvas.drawText(trueText, width - 10.dp.toPx(), trueY + 25.dp.toPx(), paint)
+                }
+            }
+
+            // Prompts
+            val promptText = when {
+                !sensorData.hasBeenCalibrated -> "KEEP DEVICE STILL TO CALIBRATE"
+                !sensorData.isGpsCalibrated && !sensorData.isManualCalibrated -> "MOVE TO GPS CALIBRATE OR USE MANUAL"
+                else -> "READY"
+            }
+            if (promptText.isNotEmpty()) drawContext.canvas.nativeCanvas.drawText(promptText, centerX, 60.dp.toPx(), promptPaint)
+        }
+
+        // 4. Altimeter HUD (Top Left)
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .statusBarsPadding()
+                .clickable { onAltimeterClick() }
+        ) {
+            Text(
+                text = "${altimeterData.rawPressureHpa} hPa",
+                color = ComposeColor.Yellow,
+                style = MaterialTheme.typography.titleLarge
+            )
+            Text(
+                text = "${altimeterData.correctedAltitudeM} m",
+                color = ComposeColor.White,
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
+
+        // 5. Airport Overlay
+        if (altimeterData.isDetailVisible) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(ComposeColor.Black.copy(alpha = 0.8f))
+                    .clickable { onAltimeterClick() }
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .background(ComposeColor.DarkGray.copy(alpha = 0.9f))
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = "Nearest Airports",
+                        color = ComposeColor.White,
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    altimeterData.airports.forEach { airport ->
+                        Row(modifier = Modifier.padding(vertical = 4.dp)) {
+                            Text(airport.code, color = ComposeColor.Yellow, modifier = Modifier.width(60.dp))
+                            Text("${airport.distanceKm.toInt()}km", color = ComposeColor.White, modifier = Modifier.width(80.dp))
+                            Text("${airport.pressureHpa.toInt()}hPa", color = ComposeColor.White, modifier = Modifier.width(80.dp))
+                            Text("${airport.elevationM.toInt()}m", color = ComposeColor.White)
+                        }
                     }
                 }
             }
         }
-
-        // Calibration Prompts (Small)
-        val promptText = when {
-            !sensorData.hasBeenCalibrated -> "KEEP DEVICE STILL TO CALIBRATE"
-            !sensorData.isGpsCalibrated && !sensorData.isManualCalibrated -> "MOVE TO GPS CALIBRATE OR USE MANUAL"
-            else -> "READY"
-        }
-        if (promptText.isNotEmpty()) drawContext.canvas.nativeCanvas.drawText(promptText, centerX, 60.dp.toPx(), promptPaint)
     }
 }
