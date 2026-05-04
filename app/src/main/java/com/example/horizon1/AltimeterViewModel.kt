@@ -14,6 +14,8 @@ import io.ktor.client.call.*
 import io.ktor.client.engine.android.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,40 +23,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.util.Locale
 import kotlin.math.*
 
 @Serializable
-data class CheckWxResponse(
-    val data: List<MetarData>
-)
-
-@Serializable
-data class MetarData(
-    val icao: String? = null,
-    val station: StationInfo? = null,
-    val barometer: BarometerInfo? = null
-)
-
-@Serializable
-data class StationInfo(
-    val name: String? = null,
-    val geometry: GeometryInfo? = null,
-    val elevation: ElevationInfo? = null
-)
-
-@Serializable
-data class GeometryInfo(
-    val coordinates: List<Double>? = null // [Lon, Lat]
-)
-
-@Serializable
-data class ElevationInfo(
-    val meters: Double? = null
-)
-
-@Serializable
-data class BarometerInfo(
-    val hpa: Float? = null
+data class NoaaMetar(
+    val icaoId: String? = null,
+    val lat: Double? = null,
+    val lon: Double? = null,
+    val elev: Int? = null,
+    val altim: Float? = null,
+    val name: String? = null
 )
 
 data class AirportData(
@@ -87,6 +66,7 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
 
     private var currentPressure = 1013.25f
     private var lastLocation: Pair<Double, Double>? = null
+    private var lastPressureUpdateTime = 0L
 
     private val client = HttpClient(Android) {
         install(ContentNegotiation) {
@@ -97,21 +77,22 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    // Replace with a real key if available
-    private val API_KEY = "646399ba0920406085a36398f7" 
-
     init {
         pressureSensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
-        startAirportUpdateLoop()
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(status = "Loading Airport DB...")
+            AirportDb.load(client)
+            startAirportUpdateLoop()
+        }
     }
 
     private fun startAirportUpdateLoop() {
         viewModelScope.launch {
             while (true) {
                 lastLocation?.let { (lat, lon) ->
-                    fetchMetarData(lat, lon)
+                    if (AirportDb.isLoaded) fetchMetarData(lat, lon)
                 }
                 delay(600000L) // 10 minutes
             }
@@ -119,57 +100,76 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun updateLocation(lat: Double, lon: Double) {
-        if (lat == 0.0 && lon == 0.0) return // Skip invalid/initial location
-
+        if (lat == 0.0 && lon == 0.0) return
+        
         val isFirstLocation = lastLocation == null
         lastLocation = lat to lon
         Log.d("AltimeterViewModel", "Location updated: $lat, $lon. isFirst: $isFirstLocation")
-        if (isFirstLocation) {
+        if (isFirstLocation && AirportDb.isLoaded) {
             viewModelScope.launch { fetchMetarData(lat, lon) }
         }
     }
 
     private suspend fun fetchMetarData(lat: Double, lon: Double) {
         try {
-            Log.d("AltimeterViewModel", "Starting fetch for $lat, $lon")
-            _uiState.value = _uiState.value.copy(status = "Fetching METAR...")
-            val url = "https://api.checkwx.com/metar/$lat/$lon/radius/50/decoded"
+            _uiState.value = _uiState.value.copy(status = "Fetching NOAA...")
+            
+            // 1. Get 5 closest ICAOs from local DB
+            val closest = AirportDb.getClosestAirports(lat, lon, 5)
+            val ids = closest.joinToString(",") { it.icao }
+            Log.d("AltimeterViewModel", "Target ICAOs: $ids")
+            
+            // 2. Fetch specific METARs from NOAA
+            val url = "https://aviationweather.gov/api/data/metar?ids=$ids&format=json&decoded=true&hours=6"
             Log.d("AltimeterViewModel", "URL: $url")
             
-            val response: CheckWxResponse = client.get(url) {
-                header("X-API-Key", API_KEY)
-            }.body()
+            val httpResponse: HttpResponse = client.get(url) {
+                header("User-Agent", "Mozilla/5.0 (Android; Horizon1 Altimeter App)")
+                header("Accept", "application/json")
+            }
+            
+            val responseString = httpResponse.bodyAsText()
+            Log.d("AltimeterViewModel", "Status: ${httpResponse.status}, Body length: ${responseString.length}")
+            
+            // Log raw response snippet to verify format
+            Log.d("AltimeterViewModel", "Raw JSON Snippet: ${responseString.take(500)}")
 
-            Log.d("AltimeterViewModel", "Response received: ${response.data.size} airports")
+            if (httpResponse.status == HttpStatusCode.NoContent || responseString.trim().isEmpty()) {
+                _uiState.value = _uiState.value.copy(status = "No data for targets")
+                return
+            }
 
-            val fetchedAirports = response.data.mapNotNull { metar ->
-                val coords = metar.station?.geometry?.coordinates
-                val pressure = metar.barometer?.hpa
-                if (coords != null && coords.size >= 2 && pressure != null) {
-                    val aLat = coords[1]
-                    val aLon = coords[0]
-                    val dist = calculateDistance(lat, lon, aLat, aLon)
+            val noaaList: List<NoaaMetar> = Json { ignoreUnknownKeys = true }.decodeFromString(responseString)
+            Log.d("AltimeterViewModel", "Total reports received: ${noaaList.size}")
+
+            // 3. Group by ICAO and take the latest report for each unique airport
+            val fetchedAirports = noaaList.filter { it.icaoId != null && it.altim != null && it.lat != null && it.lon != null }
+                .groupBy { it.icaoId }
+                .map { (icao, reports) ->
+                    // NOAA JSON altim is already in hPa (e.g. 1012.6)
+                    val report = reports[0] 
+                    val pressureHpa = report.altim!!
+                    val dist = calculateDistance(lat, lon, report.lat!!, report.lon!!)
                     AirportData(
-                        code = metar.icao ?: "???",
-                        name = metar.station.name ?: "Unknown",
-                        latitude = aLat,
-                        longitude = aLon,
-                        elevationM = metar.station.elevation?.meters ?: 0.0,
-                        pressureHpa = pressure,
+                        code = icao!!,
+                        name = report.name ?: "Unknown",
+                        latitude = report.lat,
+                        longitude = report.lon,
+                        elevationM = report.elev?.toDouble() ?: 0.0,
+                        pressureHpa = pressureHpa,
                         distanceKm = dist
                     )
-                } else null
-            }.sortedBy { it.distanceKm }.take(5)
+                }.sortedBy { it.distanceKm }.take(5)
 
             if (fetchedAirports.isNotEmpty()) {
                 updateAltimeterWithAirports(fetchedAirports)
                 _uiState.value = _uiState.value.copy(status = "METAR Updated")
             } else {
-                _uiState.value = _uiState.value.copy(status = "No airports within 50mi")
+                _uiState.value = _uiState.value.copy(status = "No data for targets")
             }
         } catch (e: Exception) {
-            Log.e("AltimeterViewModel", "Fetch failed", e)
-            _uiState.value = _uiState.value.copy(status = "Fetch failed: ${e.message}")
+            Log.e("AltimeterViewModel", "NOAA Fetch failed", e)
+            _uiState.value = _uiState.value.copy(status = "NOAA Error: ${e.message}")
         }
     }
 
@@ -199,10 +199,14 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
 
     override fun onSensorChanged(event: SensorEvent) {
         if (event.sensor.type == Sensor.TYPE_PRESSURE) {
-            currentPressure = event.values[0]
-            _uiState.value = _uiState.value.copy(rawPressureHpa = currentPressure.toInt())
-            if (_uiState.value.airports.isNotEmpty()) {
-                updateAltimeterWithAirports(_uiState.value.airports)
+            val now = System.currentTimeMillis()
+            if (now - lastPressureUpdateTime >= 1000L) {
+                currentPressure = event.values[0]
+                _uiState.value = _uiState.value.copy(rawPressureHpa = currentPressure.toInt())
+                if (_uiState.value.airports.isNotEmpty()) {
+                    updateAltimeterWithAirports(_uiState.value.airports)
+                }
+                lastPressureUpdateTime = now
             }
         }
     }
