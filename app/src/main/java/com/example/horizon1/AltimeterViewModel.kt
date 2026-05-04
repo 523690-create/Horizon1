@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.math.*
 
@@ -33,7 +35,8 @@ data class NoaaMetar(
     val lon: Double? = null,
     val elev: Int? = null,
     val altim: Float? = null,
-    val name: String? = null
+    val name: String? = null,
+    val reportTime: String? = null
 )
 
 data class AirportData(
@@ -44,11 +47,12 @@ data class AirportData(
     val elevationM: Double,
     val pressureHpa: Float,
     val distanceKm: Double = 0.0,
-    val weight: Double = 0.0
+    val weight: Double = 0.0,
+    val reportTime: String = ""
 )
 
 data class AltimeterData(
-    val rawPressureHpa: Int = 1013,
+    val rawPressureHpa: Float = 1013.25f,
     val correctedAltitudeM: Int = 0,
     val airports: List<AirportData> = emptyList(),
     val isDetailVisible: Boolean = false,
@@ -157,13 +161,15 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
                         longitude = report.lon,
                         elevationM = report.elev?.toDouble() ?: 0.0,
                         pressureHpa = pressureHpa,
-                        distanceKm = dist
+                        distanceKm = dist,
+                        reportTime = report.reportTime?.substringAfter("T")?.substringBefore(".") ?: ""
                     )
                 }.sortedBy { it.distanceKm }.take(5)
 
             if (fetchedAirports.isNotEmpty()) {
                 updateAltimeterWithAirports(fetchedAirports)
-                _uiState.value = _uiState.value.copy(status = "METAR Updated")
+                val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+                _uiState.value = _uiState.value.copy(status = "METAR Updated at $time")
             } else {
                 _uiState.value = _uiState.value.copy(status = "No data for targets")
             }
@@ -202,7 +208,7 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
             val now = System.currentTimeMillis()
             if (now - lastPressureUpdateTime >= 1000L) {
                 currentPressure = event.values[0]
-                _uiState.value = _uiState.value.copy(rawPressureHpa = currentPressure.toInt())
+                _uiState.value = _uiState.value.copy(rawPressureHpa = currentPressure)
                 if (_uiState.value.airports.isNotEmpty()) {
                     updateAltimeterWithAirports(_uiState.value.airports)
                 }
