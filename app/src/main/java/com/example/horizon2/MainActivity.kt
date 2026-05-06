@@ -120,6 +120,8 @@ class MainActivity : ComponentActivity() {
                     onAltimeterClick = { altimeterViewModel.toggleDetail() },
                     onCaptureClick = { showManualDialog = true },
                     onPlanesDistanceChange = { sensorViewModel.updatePlanesDistance(it) },
+                    onVerboseToggle = { sensorViewModel.toggleVerbose() },
+                    onGroundedToggle = { sensorViewModel.toggleGrounded() },
                     appMode = selectedMode.name
                 )
 

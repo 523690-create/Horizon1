@@ -37,7 +37,17 @@ data class AircraftData(
     val speedKts: Float,
     val heading: Float,
     val distanceKm: Float,
-    val bearingDegrees: Float
+    val bearingDegrees: Float,
+    val tailNumber: String = "",
+    val aircraftType: String = ""
+)
+
+data class CelestialObject(
+    val name: String,
+    val azimuth: Float,      // 0-360 degrees, 0=North, 90=East
+    val altitude: Float,      // -90 to 90 degrees, positive = above horizon
+    val magnitude: Float = 0f, // for stars/planets
+    val type: String = "star" // "star", "planet", "sun", "moon"
 )
 
 @Immutable
@@ -73,7 +83,10 @@ data class SensorData(
     val planesDistance: Float = 10f,
     val nearbyAircraft: List<AircraftData> = emptyList(),
     val lastAdbSource: String = "None",
-    val lastAdbUpdateTime: String = ""
+    val lastAdbUpdateTime: String = "",
+    val isVerbose: Boolean = false,
+    val showGrounded: Boolean = true,
+    val celestialObjects: List<CelestialObject> = emptyList()
 )
 
 class SensorViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
@@ -136,42 +149,50 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             var sourceIndex = 0
             
             while (true) {
-                refreshAircraftData(sources[sourceIndex])
-                sourceIndex = (sourceIndex + 1) % sources.size
-                delay(30 * 1000L) // 30 seconds for faster debug
+                val success = refreshAircraftData(sources[sourceIndex])
+                if (success) {
+                    sourceIndex = (sourceIndex + 1) % sources.size
+                    delay(5 * 60 * 1000L) // 5 minutes (standard interval)
+                } else {
+                    // Try next source immediately on failure
+                    sourceIndex = (sourceIndex + 1) % sources.size
+                    delay(1000L) // Small delay to prevent tight loop
+                }
             }
         }
     }
 
-    private suspend fun refreshAircraftData(source: String) {
-        val radius = _uiState.value.planesDistance
+    private suspend fun refreshAircraftData(source: String): Boolean {
+        // Always fetch at 100km radius to keep data available for all ranges
+        val fetchRadius = 100f
         
         // Ensure we have a valid location before fetching
         if (lastLat == 0.0 && lastLon == 0.0) {
             android.util.Log.w("AircraftRefresh", "Skipping fetch: Location not yet available")
-            return
+            return false
         }
 
         val aircraft = when (source) {
-            "OpenSky" -> aircraftRepository.fetchOpenSky(lastLat, lastLon, radius)
-            "Airplanes.Live" -> aircraftRepository.fetchAirplanesLive(lastLat, lastLon, radius)
-            "ADS-B Exchange" -> aircraftRepository.fetchAdsbExchange(lastLat, lastLon, radius)
+            "OpenSky" -> aircraftRepository.fetchOpenSky(lastLat, lastLon, fetchRadius)
+            "Airplanes.Live" -> aircraftRepository.fetchAirplanesLive(lastLat, lastLon, fetchRadius)
+            "ADS-B Exchange" -> aircraftRepository.fetchAdsbExchange(lastLat, lastLon, fetchRadius)
             else -> emptyList()
         }
         
         val currentTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
         
-        // If the current source returned nothing, but we know it should have, we don't want to 
-        // overwrite existing data from a previous successful source if the current one just failed.
-        // However, the user wants a rotation, so we should show the status.
-        
-        _uiState.value = _uiState.value.copy(
-            lastAdbSource = source,
-            nearbyAircraft = aircraft,
-            lastAdbUpdateTime = currentTime
-        )
-        
-        android.util.Log.d("AircraftRefresh", "Fetched ${aircraft.size} planes from $source at $lastLat, $lastLon radius ${radius}km at $currentTime")
+        if (aircraft.isNotEmpty()) {
+            _uiState.value = _uiState.value.copy(
+                lastAdbSource = source,
+                nearbyAircraft = aircraft,
+                lastAdbUpdateTime = currentTime
+            )
+            android.util.Log.d("AircraftRefresh", "Fetched ${aircraft.size} planes from $source at $lastLat, $lastLon (fixed 100km fetch) at $currentTime")
+            return true
+        } else {
+            android.util.Log.w("AircraftRefresh", "No planes from $source, will try next source")
+            return false
+        }
     }
 
     fun startOrientationCalibration() {
@@ -275,6 +296,14 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             planesDistanceValue = value,
             planesDistance = distance
         )
+    }
+
+    fun toggleVerbose() {
+        _uiState.value = _uiState.value.copy(isVerbose = !_uiState.value.isVerbose)
+    }
+
+    fun toggleGrounded() {
+        _uiState.value = _uiState.value.copy(showGrounded = !_uiState.value.showGrounded)
     }
 
     fun pauseSensors() {
@@ -530,6 +559,177 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
     override fun onCleared() { super.onCleared(); sensorManager.unregisterListener(this) }
 }
+
+// Celestial calculation utilities
+object CelestialCalculator {
+
+    // Bright stars of magnitude 2.0 or brighter (subset of commonly visible)
+    private val brightStars = listOf(
+        // Using a 4th parameter for Magnitude (previously a Triple with 4 args which caused error)
+        Triple("Sirius", 101.29, -16.72) to -1.46f,
+        Triple("Canopus", 95.99, -52.69) to -0.74f,
+        Triple("Arcturus", 213.91, 19.18) to -0.04f,
+        Triple("Vega", 279.23, 38.78) to 0.03f,
+        Triple("Capella", 79.17, 45.99) to 0.08f,
+        Triple("Rigel", 78.63, -8.20) to 0.13f,
+        Triple("Procyon", 114.83, 5.23) to 0.38f,
+        Triple("Altair", 297.69, 8.87) to 0.76f,
+        Triple("Betelgeuse", 88.79, 7.40) to 0.50f,
+        Triple("Aldebaran", 68.98, 16.50) to 0.87f,
+        Triple("Spica", 201.30, -11.16) to 0.98f,
+        Triple("Antares", 247.35, -26.43) to 0.92f,
+        Triple("Pollux", 131.89, 28.03) to 1.16f,
+        Triple("Castor", 116.33, 31.89) to 1.59f,
+        Triple("Deneb", 310.36, 45.28) to 1.25f,
+        Triple("Polaris", 37.95, 89.26) to 2.02f,
+        Triple("Fomalhaut", 344.41, -29.62) to 1.17f,
+        Triple("Adhara", 104.65, -28.97) to 1.50f,
+        Triple("Regulus", 152.09, 11.97) to 1.36f,
+        Triple("Albireo", 292.65, 27.95) to 3.08f
+    )
+
+    // Visible planets (simplified - assumes they're roughly in ecliptic)
+    // In reality, you'd fetch ephemeris data, but these are approximate
+    private fun getPlanetPositions(jd: Double, observerLat: Double, observerLon: Double): List<CelestialObject> {
+        val now = System.currentTimeMillis()
+        val planets = mutableListOf<CelestialObject>()
+
+        // Approximate planet RA/Dec (simplified, not accurate for precise astronomy)
+        // These should be fetched from ephemeris data in a real implementation
+        val planetData = listOf(
+            Pair("Venus", Pair(180.0, 10.0)),    // Approximate RA, Dec
+            Pair("Mars", Pair(45.0, 5.0)),
+            Pair("Jupiter", Pair(200.0, -15.0)),
+            Pair("Saturn", Pair(300.0, 20.0))
+        )
+
+        for ((name, raDec) in planetData) {
+            val (ra, dec) = raDec
+            val azAlt = raDecToAzAlt(ra, dec, observerLat, observerLon, jd)
+            if (azAlt.second > -10.0f) { // Only show if above -10 degrees (some light still visible)
+                planets.add(CelestialObject(name, azAlt.first, azAlt.second, 0f, "planet"))
+            }
+        }
+
+        return planets
+    }
+
+    fun calculateCelestialObjects(observerLat: Double, observerLon: Double): List<CelestialObject> {
+        val jd = getJulianDay(System.currentTimeMillis())
+        val objects = mutableListOf<CelestialObject>()
+
+        // Add bright stars
+        for (star in brightStars) {
+            val (name, ra, dec) = star.first
+            val mag = star.second
+            val (az, alt) = raDecToAzAlt(ra, dec, observerLat, observerLon, jd)
+            if (alt > -2.0f) { // Show stars down to -2 degrees (atmospheric refraction)
+                objects.add(CelestialObject(name, az, alt, mag, "star"))
+            }
+        }
+
+        // Add planets
+        objects.addAll(getPlanetPositions(jd, observerLat, observerLon))
+
+        // Add Sun and Moon
+        val sun = calculateSunPosition(observerLat, observerLon, jd)
+        objects.add(sun)
+
+        val moon = calculateMoonPosition(observerLat, observerLon, jd)
+        objects.add(moon)
+
+        return objects.sortedBy { it.azimuth }
+    }
+
+    private fun raDecToAzAlt(ra: Double, dec: Double, lat: Double, lon: Double, jd: Double): Pair<Float, Float> {
+        val lat_rad = Math.toRadians(lat)
+        val dec_rad = Math.toRadians(dec)
+
+        // Get local sidereal time
+        val lst = getLocalSiderealTime(lon, jd)
+        val ha = lst - ra // Hour angle
+        val ha_rad = Math.toRadians(ha)
+
+        // Convert to horizontal coordinates
+        val sin_alt = sin(dec_rad) * sin(lat_rad) + cos(dec_rad) * cos(lat_rad) * cos(ha_rad)
+        val alt = Math.toDegrees(asin(sin_alt)).toFloat()
+
+        val y = sin(ha_rad)
+        val x = cos(ha_rad) * sin(lat_rad) - tan(dec_rad) * cos(lat_rad)
+        val azimuth = (Math.toDegrees(atan2(y, x)).toFloat() + 360) % 360
+
+        return Pair(azimuth, alt)
+    }
+
+    private fun calculateSunPosition(lat: Double, lon: Double, jd: Double): CelestialObject {
+        // Simplified Sun position calculation
+        val n = jd - 2451545.0  // Days since J2000
+        val L = (280.46646 + 0.8697 * n) % 360
+        val g_rad = Math.toRadians((357.52911 + 0.9856 * n) % 360)
+
+        val sunLon = (L + 1.914 * sin(g_rad) + 0.02 * sin(2 * g_rad)) % 360
+        val sunLat = 0.0
+
+        val ra = Math.toDegrees(atan2(sin(Math.toRadians(sunLon)) * cos(Math.toRadians(23.44)), cos(Math.toRadians(sunLon)))).toDouble() % 360
+        val dec = Math.toDegrees(asin(sin(Math.toRadians(23.44)) * sin(Math.toRadians(sunLon)))).toDouble()
+
+        val (az, alt) = raDecToAzAlt(ra, dec, lat, lon, jd)
+        return CelestialObject("Sun", az, alt, -26.7f, "sun")
+    }
+
+    private fun calculateMoonPosition(lat: Double, lon: Double, jd: Double): CelestialObject {
+        // Simplified Moon position calculation
+        val n = jd - 2451545.0
+        val l = (218.3165 + 13.17639 * n) % 360
+        val m = (134.9645 + 13.06499 * n) % 360
+        val f = (93.2721 + 13.22935 * n) % 360
+
+        val l_rad = Math.toRadians(l)
+        val m_rad = Math.toRadians(m)
+        val f_rad = Math.toRadians(f)
+
+        val moonLon = (l + 6.29 * sin(m_rad) + 2.1 * sin(2 * f_rad)) % 360
+        val moonLat = (5.13 * sin(f_rad) + 2.2 * sin(m_rad - f_rad)) % 360
+
+        val ra = Math.toDegrees(atan2(sin(Math.toRadians(moonLon)) * cos(Math.toRadians(5.16)), cos(Math.toRadians(moonLon)))).toDouble() % 360
+        val dec = Math.toDegrees(asin(sin(Math.toRadians(5.16)) * sin(Math.toRadians(moonLon)))).toDouble()
+
+        val (az, alt) = raDecToAzAlt(ra, dec, lat, lon, jd)
+        return CelestialObject("Moon", az, alt, -12.6f, "moon")
+    }
+
+    private fun getJulianDay(timeMs: Long): Double {
+        val calendar = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+        calendar.timeInMillis = timeMs
+
+        val year = calendar.get(java.util.Calendar.YEAR)
+        val month = calendar.get(java.util.Calendar.MONTH) + 1
+        val day = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+        val hour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+        val minute = calendar.get(java.util.Calendar.MINUTE)
+        val second = calendar.get(java.util.Calendar.SECOND)
+
+        val a = (14 - month) / 12
+        val y = year + 4800 - a
+        val m = month + 12 * a - 3
+
+        val jd = day + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 + y / 400 - 32045.0
+        val jd_frac = (hour + minute / 60.0 + second / 3600.0) / 24.0
+
+        return jd + jd_frac - 0.5
+    }
+
+    private fun getLocalSiderealTime(lon: Double, jd: Double): Double {
+        val jd2000 = 2451545.0
+        val days = jd - jd2000
+
+        val gmst = (18.697374558 + 24.06570982441908 * days) % 24.0
+        val lst = (gmst * 15.0 + lon) % 360.0
+
+        return if (lst < 0) lst + 360.0 else lst
+    }
+}
+
 
 
 

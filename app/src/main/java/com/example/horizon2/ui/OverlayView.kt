@@ -16,11 +16,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +43,8 @@ fun OverlayView(
     onAltimeterClick: () -> Unit = {},
     onCaptureClick: () -> Unit = {},
     onPlanesDistanceChange: (Float) -> Unit = {},
+    onVerboseToggle: () -> Unit = {},
+    onGroundedToggle: () -> Unit = {},
     appMode: String = "ALTIMETER",
     modifier: Modifier = Modifier,
 ) {
@@ -49,10 +54,10 @@ fun OverlayView(
     val textPaintYellow = remember(density) {
         Paint().apply {
             color = android.graphics.Color.YELLOW
-            alpha = (255 * 0.50f).toInt()
-            textSize = with(density) { 20.dp.toPx() }
+            alpha = (255 * 0.90f).toInt()
+            textSize = with(density) { 10.dp.toPx() } // Smallest legible
             typeface = Typeface.DEFAULT_BOLD
-            textAlign = Paint.Align.LEFT
+            textAlign = Paint.Align.CENTER
         }
     }
 
@@ -60,9 +65,9 @@ fun OverlayView(
         Paint().apply {
             color = android.graphics.Color.WHITE
             alpha = (255 * 0.90f).toInt()
-            textSize = with(density) { 18.dp.toPx() }
+            textSize = with(density) { 10.dp.toPx() } // Smallest legible
             typeface = Typeface.DEFAULT_BOLD
-            textAlign = Paint.Align.RIGHT
+            textAlign = Paint.Align.CENTER
         }
     }
 
@@ -193,6 +198,71 @@ fun OverlayView(
                 else -> "READY"
             }
             if (promptText.isNotEmpty()) drawContext.canvas.nativeCanvas.drawText(promptText, centerX, 60.dp.toPx(), promptPaint)
+
+            // AIRCRAFT HUD POPULATION
+            if (appMode == "PLANES") {
+                val hFov = 60f 
+                val vFov = 45f 
+                val hSensitivity = width / hFov
+                val vSensitivity = height / vFov
+
+                sensorData.nearbyAircraft.forEach { aircraft ->
+                    // 1. Filtering
+                    val isTooSlow = !sensorData.showGrounded && aircraft.speedKts < 20
+                    val radiusKm = sensorData.planesDistance / 2f
+                    val isOutOfRange = aircraft.distanceKm > radiusKm
+                    if (isTooSlow || isOutOfRange) return@forEach
+
+                    // 2. Calculate Azimuth relative to User Heading
+                    val currentHeading = if (sensorData.isGpsCalibrated || sensorData.isManualCalibrated) {
+                        sensorData.trueHeading
+                    } else {
+                        sensorData.heading
+                    }
+                    
+                    val azDiff = (aircraft.bearingDegrees - currentHeading + 540) % 360 - 180
+                    
+                    // 3. Calculate Elevation relative to Horizon
+                    val altDiffM = aircraft.altitudeM - 0f 
+                    val distanceM = aircraft.distanceKm * 1000f
+                    val elevationAngle = Math.toDegrees(atan2(altDiffM.toDouble(), distanceM.toDouble())).toFloat()
+                    val elDiff = elevationAngle - sensorData.truePitch
+
+                    // 4. Project to Screen Coordinates
+                    rotate(degrees = sensorData.trueRoll, pivot = Offset(centerX, centerY)) {
+                        val screenX = centerX + (azDiff * hSensitivity)
+                        val screenY = centerY - (elDiff * vSensitivity) 
+
+                        if (screenX in 0f..width && screenY in 0f..height) {
+                            drawCircle(
+                                color = ComposeColor.Yellow,
+                                radius = 3.dp.toPx(),
+                                center = Offset(screenX, screenY)
+                            )
+
+                            // Column label below the dot
+                            val flightInfo = if (sensorData.isVerbose) {
+                                "${expandAirline(aircraft.callsign)} ${aircraft.tailNumber}"
+                            } else {
+                                "${aircraft.callsign} ${aircraft.tailNumber}"
+                            }
+                            
+                            val typeInfo = if (sensorData.isVerbose) {
+                                "${expandType(aircraft.aircraftType)} - ${aircraft.distanceKm.toInt()}km"
+                            } else {
+                                "${aircraft.aircraftType} - ${aircraft.distanceKm.toInt()}km"
+                            }
+                            
+                            val metrics = "${aircraft.speedKts.toInt()}kts ${aircraft.heading.toInt()}° ${aircraft.altitudeM.toInt()}m"
+                            
+                            val rowHeight = 12.dp.toPx()
+                            drawContext.canvas.nativeCanvas.drawText(flightInfo, screenX, screenY + rowHeight, textPaintYellow)
+                            drawContext.canvas.nativeCanvas.drawText(typeInfo, screenX, screenY + rowHeight * 2, textPaintWhite)
+                            drawContext.canvas.nativeCanvas.drawText(metrics, screenX, screenY + rowHeight * 3, textPaintWhite)
+                        }
+                    }
+                }
+            }
         }
 
         // 4. Altimeter HUD (Bottom Left)
@@ -301,7 +371,9 @@ fun OverlayView(
                  altimeterSize = altimeterSize.value,
                  altimeterPosition = altimeterPosition.value,
                  sensorData = sensorData,
-                 onDistanceChange = onPlanesDistanceChange
+                 onDistanceChange = onPlanesDistanceChange,
+                 onVerboseToggle = onVerboseToggle,
+                 onGroundedToggle = onGroundedToggle
              )
          }
     }
@@ -313,7 +385,9 @@ fun PlanesOverlay(
     altimeterSize: IntSize = IntSize.Zero,
     altimeterPosition: androidx.compose.ui.geometry.Offset = androidx.compose.ui.geometry.Offset.Zero,
     sensorData: SensorData,
-    onDistanceChange: (Float) -> Unit
+    onDistanceChange: (Float) -> Unit,
+    onVerboseToggle: () -> Unit,
+    onGroundedToggle: () -> Unit
 ) {
     Box(
         modifier = Modifier.fillMaxSize()
@@ -358,8 +432,8 @@ fun PlanesOverlay(
                                 // Radial lines every 30 degrees
                                 for (angle in 0 until 360 step 30) {
                                     val rad = Math.toRadians(angle.toDouble())
-                                    val endX = center.x + radius * Math.cos(rad).toFloat()
-                                    val endY = center.y + radius * Math.sin(rad).toFloat()
+                                    val endX = center.x + radius * cos(rad).toFloat()
+                                    val endY = center.y + radius * sin(rad).toFloat()
                                     drawLine(
                                         color = ComposeColor.White,
                                         start = center,
@@ -386,36 +460,83 @@ fun PlanesOverlay(
                                 )
 
                                 // AIRCRAFT MAPPING (Radar Map)
-                                // Top is North. Slider value is Diameter.
-                                // Map Radius = planesDistance / 2
                                 val mapRadiusKm = sensorData.planesDistance / 2f
                                 if (mapRadiusKm > 0) {
                                     sensorData.nearbyAircraft.forEach { aircraft ->
+                                        // Radar Map: Show ALL fetched planes regardless of slider if they fit the circle boundary
+                                        // Wait, the user said: "keep them all available to plot if the slider range is changed."
+                                        // and "On HUD, show only planes within range"
+                                        // Usually radar maps scale with the slider. 
+                                        // I'll keep the radar scaling with slider, but HUD filtered by slider.
+                                        
                                         val distRatio = aircraft.distanceKm / mapRadiusKm
                                         if (distRatio <= 1.0f) {
-                                            // Top is North (0 deg). 
-                                            // In Canvas, 0 deg is 3 o'clock. 
-                                            // We want North (0 bearing) to be at 12 o'clock (-90 deg).
                                             val angleRad = Math.toRadians((aircraft.bearingDegrees - 90f).toDouble())
                                             val x = center.x + (distRatio * radius * cos(angleRad).toFloat())
                                             val y = center.y + (distRatio * radius * sin(angleRad).toFloat())
                                             
-                                            drawCircle(
-                                                color = ComposeColor.White,
-                                                radius = 3.dp.toPx(),
-                                                center = Offset(x, y)
-                                            )
+                                            // Check grounded toggle for radar too? 
+                                            // "Add a toggle switch for "grounded" to show/ignore planes moving below 20 knots."
+                                            if (sensorData.showGrounded || aircraft.speedKts >= 20) {
+                                                drawCircle(
+                                                    color = ComposeColor.White,
+                                                    radius = 2.dp.toPx(),
+                                                    center = Offset(x, y)
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
 
-                        // 2. Logarithmic Slider and Distance Label
+                        // 2. Control Toggles (Moved left to avoid slider interference)
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(start = 100.dp, bottom = 10.dp)
+                                .width(80.dp),
+                            horizontalAlignment = Alignment.Start,
+                            verticalArrangement = Arrangement.spacedBy(0.dp)
+                        ) {
+                             // Verbose Toggle
+                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                 Text("V", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall)
+                                 Switch(
+                                     checked = sensorData.isVerbose,
+                                     onCheckedChange = { onVerboseToggle() },
+                                     modifier = Modifier.scale(0.45f),
+                                     colors = SwitchDefaults.colors(
+                                         checkedThumbColor = ComposeColor.Yellow,
+                                         uncheckedThumbColor = ComposeColor.Gray,
+                                         checkedTrackColor = ComposeColor.DarkGray,
+                                         uncheckedTrackColor = ComposeColor.Black
+                                     )
+                                 )
+                             }
+
+                             // Grounded Toggle
+                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                 Text("G", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall)
+                                 Switch(
+                                     checked = sensorData.showGrounded,
+                                     onCheckedChange = { onGroundedToggle() },
+                                     modifier = Modifier.scale(0.45f),
+                                     colors = SwitchDefaults.colors(
+                                         checkedThumbColor = ComposeColor.Green,
+                                         uncheckedThumbColor = ComposeColor.Gray,
+                                         checkedTrackColor = ComposeColor.DarkGray,
+                                         uncheckedTrackColor = ComposeColor.Black
+                                     )
+                                 )
+                             }
+                        }
+
+                        // 3. Logarithmic Slider and Distance Label
                         Box(
                             modifier = Modifier
                                 .align(Alignment.CenterEnd)
-                                .width(90.dp) // Slightly wider for labels
+                                .width(80.dp) 
                                 .fillMaxHeight(),
                             contentAlignment = Alignment.TopStart
                         ) {
@@ -424,7 +545,6 @@ fun PlanesOverlay(
                                     .padding(top = 10.dp, start = 0.dp),
                                 horizontalAlignment = Alignment.Start
                             ) {
-                                // Distance Label: ##km, integer, one line
                                 Text(
                                     text = "${sensorData.planesDistance.toInt()}km",
                                     color = ComposeColor.White,
@@ -432,7 +552,6 @@ fun PlanesOverlay(
                                     maxLines = 1
                                 )
                                 
-                                // Abbreviated Source
                                 val shortSource = when (sensorData.lastAdbSource) {
                                     "OpenSky" -> "OS"
                                     "ADS-B Exchange" -> "AE"
@@ -445,7 +564,6 @@ fun PlanesOverlay(
                                     style = MaterialTheme.typography.labelSmall
                                 )
                                 
-                                // Retrieval Time
                                 Text(
                                     text = sensorData.lastAdbUpdateTime,
                                     color = ComposeColor.Gray,
@@ -453,7 +571,6 @@ fun PlanesOverlay(
                                 )
                             }
 
-                            // Vertical Slider (250dp long)
                             Box(
                                 modifier = Modifier
                                     .fillMaxHeight()
@@ -481,6 +598,45 @@ fun PlanesOverlay(
                 }
             }
         }
+    }
+}
+
+private fun expandAirline(callsign: String): String {
+    val upper = callsign.uppercase()
+    return when {
+        upper.startsWith("UAL") -> "United"
+        upper.startsWith("AAL") -> "American"
+        upper.startsWith("DAL") -> "Delta"
+        upper.startsWith("SWA") -> "Southwest"
+        upper.startsWith("JBU") -> "JetBlue"
+        upper.startsWith("BAW") -> "British"
+        upper.startsWith("DLH") -> "Lufthansa"
+        upper.startsWith("AFR") -> "Air France"
+        upper.startsWith("UPS") -> "UPS"
+        upper.startsWith("FDX") -> "FedEx"
+        else -> callsign
+    }
+}
+
+private fun expandType(type: String): String {
+    val upper = type.uppercase()
+    return when (upper) {
+        "B738" -> "Boeing 737-800"
+        "B737" -> "Boeing 737"
+        "B739" -> "Boeing 737-900"
+        "A320" -> "Airbus A320"
+        "A321" -> "Airbus A321"
+        "A319" -> "Airbus A319"
+        "B772" -> "Boeing 777-200"
+        "B77W" -> "Boeing 777-300ER"
+        "B788" -> "Boeing 787-8"
+        "B789" -> "Boeing 787-9"
+        "A359" -> "Airbus A350-900"
+        "CRJ7" -> "Bombardier CRJ-700"
+        "CRJ9" -> "Bombardier CRJ-900"
+        "E175" -> "Embraer 175"
+        "E190" -> "Embraer 190"
+        else -> type
     }
 }
 

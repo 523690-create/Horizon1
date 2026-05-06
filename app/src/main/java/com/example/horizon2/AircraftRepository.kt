@@ -55,7 +55,9 @@ class AircraftRepository {
                         speedKts = (state[9].jsonPrimitive.floatOrNull ?: 0f) * 1.94384f,
                         heading = state[10].jsonPrimitive.floatOrNull ?: 0f,
                         distanceKm = dist.toFloat(),
-                        bearingDegrees = bearing.toFloat()
+                        bearingDegrees = bearing.toFloat(),
+                        tailNumber = "", // OpenSky doesn't provide tail # in states API easily
+                        aircraftType = ""  // OpenSky doesn't provide type in states API easily
                     )
 
                     if (dist <= radiusKm) {
@@ -81,6 +83,8 @@ class AircraftRepository {
         @Serializable
         data class AliveAircraft(
             val flight: String? = null,
+            val r: String? = null, // registration (tail number)
+            val t: String? = null, // type
             val lat: Double? = null,
             val lon: Double? = null,
             val alt_baro: JsonElement? = null,
@@ -113,7 +117,9 @@ class AircraftRepository {
                     speedKts = ac.gs ?: 0f,
                     heading = ac.track ?: 0f,
                     distanceKm = dist.toFloat(),
-                    bearingDegrees = bearing.toFloat()
+                    bearingDegrees = bearing.toFloat(),
+                    tailNumber = ac.r ?: "",
+                    aircraftType = ac.t ?: ""
                 )
 
                 if (dist <= radiusKm) {
@@ -128,13 +134,14 @@ class AircraftRepository {
     }
 
     suspend fun fetchAdsbExchange(lat: Double, lon: Double, radiusKm: Float): List<AircraftData> {
-        // adsb.fi is a reliable community mirror of ADS-B data
         val radiusNm = radiusKm * 0.539957f
         val url = "https://adsb.fi/api/v2/point/$lat/$lon/${radiusNm.toInt()}"
         
         @Serializable
         data class AeAircraft(
             val flight: String? = null,
+            val r: String? = null, // registration
+            val t: String? = null, // type
             val lat: Double? = null,
             val lon: Double? = null,
             val alt_baro: JsonElement? = null,
@@ -167,13 +174,12 @@ class AircraftRepository {
                     speedKts = ac.gs ?: 0f,
                     heading = ac.track ?: 0f,
                     distanceKm = dist.toFloat(),
-                    bearingDegrees = bearing.toFloat()
+                    bearingDegrees = bearing.toFloat(),
+                    tailNumber = ac.r ?: "",
+                    aircraftType = ac.t ?: ""
                 )
 
-                if (dist <= radiusKm) {
-                    android.util.Log.v("AircraftRepo", "Keeping AE aircraft: ${aircraft.callsign} at ${aircraft.distanceKm}km")
-                    aircraft
-                } else null
+                if (dist <= radiusKm) aircraft else null
             } ?: emptyList()
         } catch (e: Exception) {
             android.util.Log.e("AircraftRepo", "ADS-B Exchange Error: ${e.message}")
