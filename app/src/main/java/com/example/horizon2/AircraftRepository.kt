@@ -59,19 +59,17 @@ class AircraftRepository {
                     )
 
                     if (dist <= radiusKm) {
-                        android.util.Log.v("AircraftRepo", "Keeping aircraft: ${aircraft.callsign} at ${aircraft.distanceKm}km")
+                        android.util.Log.v("AircraftRepo", "Keeping OS aircraft: ${aircraft.callsign} at ${aircraft.distanceKm}km")
                         aircraft
                     } else {
                         null
                     }
                 } catch (e: Exception) {
-                    android.util.Log.v("AircraftRepo", "Error parsing state: ${e.message}")
                     null
                 }
             } ?: emptyList()
         } catch (e: Exception) {
             android.util.Log.e("AircraftRepo", "OpenSky Error: ${e.message}")
-            e.printStackTrace()
             emptyList()
         }
     }
@@ -130,7 +128,7 @@ class AircraftRepository {
     }
 
     suspend fun fetchAdsbExchange(lat: Double, lon: Double, radiusKm: Float): List<AircraftData> {
-        // Use adsb.fi or adsb.lol as community-friendly AE-compatible mirrors
+        // adsb.fi is a reliable community mirror of ADS-B data
         val radiusNm = radiusKm * 0.539957f
         val url = "https://adsb.fi/api/v2/point/$lat/$lon/${radiusNm.toInt()}"
         
@@ -172,7 +170,10 @@ class AircraftRepository {
                     bearingDegrees = bearing.toFloat()
                 )
 
-                if (dist <= radiusKm) aircraft else null
+                if (dist <= radiusKm) {
+                    android.util.Log.v("AircraftRepo", "Keeping AE aircraft: ${aircraft.callsign} at ${aircraft.distanceKm}km")
+                    aircraft
+                } else null
             } ?: emptyList()
         } catch (e: Exception) {
             android.util.Log.e("AircraftRepo", "ADS-B Exchange Error: ${e.message}")
