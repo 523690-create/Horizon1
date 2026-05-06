@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.clickable
@@ -30,7 +31,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import java.time.*
 import java.time.format.*
-import kotlin.math.abs
+import kotlin.math.*
 
 @Composable
 fun OverlayView(
@@ -38,6 +39,7 @@ fun OverlayView(
     altimeterData: AltimeterData = AltimeterData(),
     onAltimeterClick: () -> Unit = {},
     onCaptureClick: () -> Unit = {},
+    onPlanesDistanceChange: (Float) -> Unit = {},
     appMode: String = "ALTIMETER",
     modifier: Modifier = Modifier,
 ) {
@@ -297,7 +299,9 @@ fun OverlayView(
              PlanesOverlay(
                  density = density,
                  altimeterSize = altimeterSize.value,
-                 altimeterPosition = altimeterPosition.value
+                 altimeterPosition = altimeterPosition.value,
+                 sensorData = sensorData,
+                 onDistanceChange = onPlanesDistanceChange
              )
          }
     }
@@ -307,66 +311,169 @@ fun OverlayView(
 fun PlanesOverlay(
     density: androidx.compose.ui.unit.Density,
     altimeterSize: IntSize = IntSize.Zero,
-    altimeterPosition: androidx.compose.ui.geometry.Offset = androidx.compose.ui.geometry.Offset.Zero
+    altimeterPosition: androidx.compose.ui.geometry.Offset = androidx.compose.ui.geometry.Offset.Zero,
+    sensorData: SensorData,
+    onDistanceChange: (Float) -> Unit
 ) {
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Black overlay positioned in lower left
-        // Position it to extend from bearing area up to just above Altimeter text
-        // Width extends from left edge to just before the "A" in Altimeter
         if (altimeterSize != IntSize.Zero) {
             with(density) {
-                // Overlay positioned with bottom padding to stay above bearing data
-                // Height: extends from bearing area (MAG, MOV, MAN text) up to near Altimeter
-                // This gives approximately 120-140dp of height for the overlay
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(start = 16.dp, bottom = 60.dp) // Position above bearing text
+                        .padding(start = 16.dp, bottom = 100.dp)
                         .navigationBarsPadding()
-                        .background(color = ComposeColor.Black)
-                        .width(135.dp) // Width to fit before "Altimeter" text starts
-                        .height(110.dp) // Height to extend up to near Altimeter
+                        .width(260.dp)
+                        .height(250.dp)
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
-                        // Green circle (0.2 alpha) positioned in center, avoiding slider on right
+                        // 1. Opaque Dark Green Circle with Geometric Markings and Aircraft Map
                         Box(
                             modifier = Modifier
-                                .align(Alignment.Center)
-                                .size(60.dp)
+                                .align(Alignment.CenterStart)
+                                .size(180.dp)
                                 .background(
-                                    color = ComposeColor.Green,
+                                    color = ComposeColor(0, 50, 0),
                                     shape = androidx.compose.foundation.shape.CircleShape
                                 )
-                                .alpha(0.2f)
-                        )
+                        ) {
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                val radius = size.width / 2
+                                val center = Offset(size.width / 2, size.height / 2)
+                                
+                                // Three concentric white rings (radii: 30dp, 60dp, 90dp)
+                                val ringRadii = listOf(30.dp.toPx(), 60.dp.toPx(), 90.dp.toPx())
+                                ringRadii.forEach { r ->
+                                    drawCircle(
+                                        color = ComposeColor.White,
+                                        radius = r,
+                                        center = center,
+                                        style = Stroke(width = 1.dp.toPx()),
+                                        alpha = 0.5f
+                                    )
+                                }
+                                
+                                // Radial lines every 30 degrees
+                                for (angle in 0 until 360 step 30) {
+                                    val rad = Math.toRadians(angle.toDouble())
+                                    val endX = center.x + radius * Math.cos(rad).toFloat()
+                                    val endY = center.y + radius * Math.sin(rad).toFloat()
+                                    drawLine(
+                                        color = ComposeColor.White,
+                                        start = center,
+                                        end = Offset(endX, endY),
+                                        strokeWidth = 1.dp.toPx(),
+                                        alpha = 0.3f
+                                    )
+                                }
 
-                        // Vertical slider along entire right margin of the overlay
+                                // 45-degree green wedge pointing to bearing
+                                val currentHeading = if (sensorData.isGpsCalibrated || sensorData.isManualCalibrated) {
+                                    sensorData.trueHeading
+                                } else {
+                                    sensorData.heading
+                                }
+                                
+                                val startAngle = currentHeading - 90f - 22.5f
+                                drawArc(
+                                    color = ComposeColor(0, 100, 0),
+                                    startAngle = startAngle,
+                                    sweepAngle = 45f,
+                                    useCenter = true,
+                                    alpha = 0.5f
+                                )
+
+                                // AIRCRAFT MAPPING (Radar Map)
+                                // Top is North. Slider value is Diameter.
+                                // Map Radius = planesDistance / 2
+                                val mapRadiusKm = sensorData.planesDistance / 2f
+                                if (mapRadiusKm > 0) {
+                                    sensorData.nearbyAircraft.forEach { aircraft ->
+                                        val distRatio = aircraft.distanceKm / mapRadiusKm
+                                        if (distRatio <= 1.0f) {
+                                            // Top is North (0 deg). 
+                                            // In Canvas, 0 deg is 3 o'clock. 
+                                            // We want North (0 bearing) to be at 12 o'clock (-90 deg).
+                                            val angleRad = Math.toRadians((aircraft.bearingDegrees - 90f).toDouble())
+                                            val x = center.x + (distRatio * radius * cos(angleRad).toFloat())
+                                            val y = center.y + (distRatio * radius * sin(angleRad).toFloat())
+                                            
+                                            drawCircle(
+                                                color = ComposeColor.White,
+                                                radius = 3.dp.toPx(),
+                                                center = Offset(x, y)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 2. Logarithmic Slider and Distance Label
                         Box(
                             modifier = Modifier
                                 .align(Alignment.CenterEnd)
-                                .width(16.dp)
-                                .fillMaxHeight()
-                                .background(color = ComposeColor.DarkGray.copy(alpha = 0.5f))
+                                .width(90.dp) // Slightly wider for labels
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.TopStart
                         ) {
-                            // Slider track with thumb
-                            Canvas(
+                            Column(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 4.dp)
+                                    .padding(top = 10.dp, start = 0.dp),
+                                horizontalAlignment = Alignment.Start
                             ) {
-                                // Draw vertical slider track
-                                drawRect(
-                                    color = ComposeColor.Gray,
-                                    topLeft = Offset(size.width / 2 - 1.dp.toPx(), 0f),
-                                    size = androidx.compose.ui.geometry.Size(2.dp.toPx(), size.height)
+                                // Distance Label: ##km, integer, one line
+                                Text(
+                                    text = "${sensorData.planesDistance.toInt()}km",
+                                    color = ComposeColor.White,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    maxLines = 1
                                 )
-                                // Draw slider thumb (circle)
-                                drawCircle(
-                                    color = ComposeColor.Yellow,
-                                    radius = 4.dp.toPx(),
-                                    center = Offset(size.width / 2, size.height / 2)
+                                
+                                // Abbreviated Source
+                                val shortSource = when (sensorData.lastAdbSource) {
+                                    "OpenSky" -> "OS"
+                                    "ADS-B Exchange" -> "AE"
+                                    "Airplanes.Live" -> "AL"
+                                    else -> "N/A"
+                                }
+                                Text(
+                                    text = shortSource,
+                                    color = ComposeColor.Gray,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                
+                                // Retrieval Time
+                                Text(
+                                    text = sensorData.lastAdbUpdateTime,
+                                    color = ComposeColor.Gray,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+
+                            // Vertical Slider (250dp long)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .width(32.dp)
+                                    .align(Alignment.CenterEnd),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Slider(
+                                    value = sensorData.planesDistanceValue,
+                                    onValueChange = onDistanceChange,
+                                    modifier = Modifier
+                                        .requiredWidth(250.dp)
+                                        .graphicsLayer {
+                                            rotationZ = -90f
+                                        },
+                                    colors = androidx.compose.material3.SliderDefaults.colors(
+                                        thumbColor = ComposeColor.Yellow,
+                                        activeTrackColor = ComposeColor.Gray,
+                                        inactiveTrackColor = ComposeColor.DarkGray
+                                    )
                                 )
                             }
                         }

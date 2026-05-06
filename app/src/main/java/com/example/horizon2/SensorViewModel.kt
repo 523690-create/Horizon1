@@ -8,9 +8,12 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlin.math.*
 
 enum class CalibrationState {
@@ -24,6 +27,17 @@ data class Orientation(
     val pitch: Float,
     val roll: Float,
     val fullPitch: Float = 0f // -180 to 180 for continuous vertical line
+)
+
+data class AircraftData(
+    val callsign: String,
+    val lat: Double,
+    val lon: Double,
+    val altitudeM: Float,
+    val speedKts: Float,
+    val heading: Float,
+    val distanceKm: Float,
+    val bearingDegrees: Float
 )
 
 @Immutable
@@ -54,7 +68,12 @@ data class SensorData(
     val hasBeenCalibrated: Boolean = false,
     val sensorDelay: Int = SensorManager.SENSOR_DELAY_UI,
     val overlayAlpha: Float = 0.8f,
-    val lastMetarStatus: String = ""
+    val lastMetarStatus: String = "",
+    val planesDistanceValue: Float = 0.5f,
+    val planesDistance: Float = 10f,
+    val nearbyAircraft: List<AircraftData> = emptyList(),
+    val lastAdbSource: String = "None",
+    val lastAdbUpdateTime: String = ""
 )
 
 class SensorViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
@@ -63,6 +82,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
     private val gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+    private val aircraftRepository = AircraftRepository()
 
     // Current settings
     private var currentSensorDelay = SensorManager.SENSOR_DELAY_UI
@@ -106,6 +126,52 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         sensorManager.registerListener(this, accelerometer, currentSensorDelay)
         sensorManager.registerListener(this, magnetometer, currentSensorDelay)
         sensorManager.registerListener(this, gyroscope, currentSensorDelay)
+        
+        startAircraftRefreshLoop()
+    }
+
+    private fun startAircraftRefreshLoop() {
+        viewModelScope.launch {
+            val sources = listOf("OpenSky", "ADS-B Exchange", "Airplanes.Live")
+            var sourceIndex = 0
+            
+            while (true) {
+                refreshAircraftData(sources[sourceIndex])
+                sourceIndex = (sourceIndex + 1) % sources.size
+                delay(30 * 1000L) // 30 seconds for faster debug
+            }
+        }
+    }
+
+    private suspend fun refreshAircraftData(source: String) {
+        val radius = _uiState.value.planesDistance
+        
+        // Ensure we have a valid location before fetching
+        if (lastLat == 0.0 && lastLon == 0.0) {
+            android.util.Log.w("AircraftRefresh", "Skipping fetch: Location not yet available")
+            return
+        }
+
+        val aircraft = when (source) {
+            "OpenSky" -> aircraftRepository.fetchOpenSky(lastLat, lastLon, radius)
+            "Airplanes.Live" -> aircraftRepository.fetchAirplanesLive(lastLat, lastLon, radius)
+            "ADS-B Exchange" -> aircraftRepository.fetchAdsbExchange(lastLat, lastLon, radius)
+            else -> emptyList()
+        }
+        
+        val currentTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+        
+        // If the current source returned nothing, but we know it should have, we don't want to 
+        // overwrite existing data from a previous successful source if the current one just failed.
+        // However, the user wants a rotation, so we should show the status.
+        
+        _uiState.value = _uiState.value.copy(
+            lastAdbSource = source,
+            nearbyAircraft = aircraft,
+            lastAdbUpdateTime = currentTime
+        )
+        
+        android.util.Log.d("AircraftRefresh", "Fetched ${aircraft.size} planes from $source at $lastLat, $lastLon radius ${radius}km at $currentTime")
     }
 
     fun startOrientationCalibration() {
@@ -199,6 +265,26 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     fun updateOverlayAlpha(alpha: Float) {
         currentOverlayAlpha = alpha
         _uiState.value = _uiState.value.copy(overlayAlpha = alpha)
+    }
+
+    fun updatePlanesDistance(value: Float) {
+        // Calculate logarithmic distance: 10^(value * log10(99.0)) -> 10^0 = 1, 10^log10(99) = 99
+        val maxDist = 99f
+        val distance = 10f.pow(value * log10(maxDist))
+        _uiState.value = _uiState.value.copy(
+            planesDistanceValue = value,
+            planesDistance = distance
+        )
+    }
+
+    fun pauseSensors() {
+        sensorManager.unregisterListener(this)
+    }
+
+    fun resumeSensors() {
+        accelerometer?.let { sensorManager.registerListener(this, it, currentSensorDelay) }
+        magnetometer?.let { sensorManager.registerListener(this, it, currentSensorDelay) }
+        gyroscope?.let { sensorManager.registerListener(this, it, currentSensorDelay) }
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -444,7 +530,6 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
     override fun onCleared() { super.onCleared(); sensorManager.unregisterListener(this) }
 }
-
 
 
 

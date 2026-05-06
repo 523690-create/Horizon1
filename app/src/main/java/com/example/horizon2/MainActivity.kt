@@ -119,6 +119,7 @@ class MainActivity : ComponentActivity() {
                     altimeterData = altimeterData,
                     onAltimeterClick = { altimeterViewModel.toggleDetail() },
                     onCaptureClick = { showManualDialog = true },
+                    onPlanesDistanceChange = { sensorViewModel.updatePlanesDistance(it) },
                     appMode = selectedMode.name
                 )
 

@@ -98,7 +98,7 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
                 lastLocation?.let { (lat, lon) ->
                     if (AirportDb.isLoaded) fetchMetarData(lat, lon)
                 }
-                delay(600000L) // 10 minutes
+                delay(300000L) // 5 minutes
             }
         }
     }
@@ -119,7 +119,7 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
             _uiState.value = _uiState.value.copy(status = "Fetching NOAA...")
             
             // 1. Get 5 closest ICAOs from local DB
-            val closest = AirportDb.getClosestAirports(lat, lon, 5)
+            val closest = AirportDb.getClosestAirports(lat, lon, 10)
             val ids = closest.joinToString(",") { it.icao }
             Log.d("AltimeterViewModel", "Target ICAOs: $ids")
             
@@ -204,10 +204,20 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.value = _uiState.value.copy(isDetailVisible = !_uiState.value.isDetailVisible)
     }
 
+    fun pauseSensors() {
+        sensorManager.unregisterListener(this)
+    }
+
+    fun resumeSensors() {
+        pressureSensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
+    }
+
     override fun onSensorChanged(event: SensorEvent) {
         if (event.sensor.type == Sensor.TYPE_PRESSURE) {
             val now = System.currentTimeMillis()
-            if (now - lastPressureUpdateTime >= 2000L) {
+            if (now - lastPressureUpdateTime >= 10000L) {
                 currentPressure = event.values[0]
                 _uiState.value = _uiState.value.copy(rawPressureHpa = currentPressure)
                 if (_uiState.value.airports.isNotEmpty()) {
@@ -235,6 +245,12 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
         sensorManager.unregisterListener(this)
     }
 }
+
+
+
+
+
+
 
 
 
