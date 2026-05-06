@@ -182,7 +182,8 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
     private fun updateAltimeterWithAirports(airports: List<AirportData>) {
         var totalWeight = 0.0
         var weightedSum = 0.0
-        val finalAirports = airports.map {
+        val top5 = airports.take(5)
+        val finalAirports = top5.map {
             val weight = 1.0 / (it.distanceKm * it.distanceKm + 1.0)
             totalWeight += weight
             weightedSum += it.pressureHpa * weight

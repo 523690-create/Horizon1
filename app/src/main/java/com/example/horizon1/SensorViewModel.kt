@@ -52,7 +52,8 @@ data class SensorData(
     val whiteBubbleX: Float = 0f,
     val whiteBubbleY: Float = 0f,
     val hasBeenCalibrated: Boolean = false,
-    val overlayAlpha: Float = 0.8f
+    val overlayAlpha: Float = 0.8f,
+    val lastMetarStatus: String = ""
 )
 
 class SensorViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
@@ -119,14 +120,14 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     }
 
     fun calibrateWithGps(bearing: Float, speed: Float, bearingAccuracy: Float = 10f) {
-        if (speed > 2.0f && bearingAccuracy <= 4.0f) { // Only calibrate if moving and precise
+        if (speed > 1.0f && bearingAccuracy <= 15.0f) { // Relaxed from 2.0f and 4.0f
             val gyroOrientation = getOrientationFromMatrix(gyroOnlyMatrix)
             
             // Offset = GpsBearing - CurrentGyroAzimuth
             val offset = (bearing - gyroOrientation.azimuth + 540) % 360 - 180
             
             // Apply a simple low-pass filter if we already have an offset
-            gpsNorthOffset = gpsNorthOffset?.let { (0.95f * it) + (0.05f * offset) } ?: offset
+            gpsNorthOffset = gpsNorthOffset?.let { (0.90f * it) + (0.10f * offset) } ?: offset
             
             _uiState.value = _uiState.value.copy(
                 isGpsCalibrated = true,
@@ -175,6 +176,10 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
 
     fun setDisplayRotation(rotation: Int) {
         displayRotation = rotation
+    }
+
+    fun updateMetarStatus(status: String) {
+        _uiState.value = _uiState.value.copy(lastMetarStatus = status)
     }
 
     override fun onSensorChanged(event: SensorEvent) {
