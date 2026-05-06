@@ -1,4 +1,4 @@
-package com.example.horizon1
+package com.example.horizon2
 
 import android.annotation.SuppressLint
 import android.app.Application
@@ -84,3 +84,7 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
         stopLocationUpdates()
     }
 }
+
+
+
+

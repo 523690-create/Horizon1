@@ -1,4 +1,4 @@
-package com.example.horizon1.ui
+package com.example.horizon2.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,9 +18,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.drawscope.Stroke
-import com.example.horizon1.CalibrationState
-import com.example.horizon1.SensorData
-import com.example.horizon1.AltimeterData
+import com.example.horizon2.CalibrationState
+import com.example.horizon2.SensorData
+import com.example.horizon2.AltimeterData
 import android.graphics.Paint
 import android.graphics.Typeface
 import kotlin.math.abs
@@ -246,3 +246,7 @@ fun OverlayView(
         }
     }
 }
+
+
+
+

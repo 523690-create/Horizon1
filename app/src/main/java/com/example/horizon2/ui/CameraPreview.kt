@@ -1,4 +1,4 @@
-package com.example.horizon1.ui
+package com.example.horizon2.ui
 
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
@@ -52,3 +52,7 @@ fun CameraPreview(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxSize(),
     )
 }
+
+
+
+

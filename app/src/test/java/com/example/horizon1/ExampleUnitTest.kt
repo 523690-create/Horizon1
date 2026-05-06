@@ -1,4 +1,4 @@
-package com.example.horizon1
+package com.example.horizon2
 
 import org.junit.Test
 
@@ -15,3 +15,6 @@ class ExampleUnitTest {
         assertEquals(4, 2 + 2)
     }
 }
+
+
+

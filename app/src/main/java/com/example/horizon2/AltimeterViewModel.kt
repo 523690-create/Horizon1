@@ -1,4 +1,4 @@
-package com.example.horizon1
+package com.example.horizon2
 
 import android.app.Application
 import android.content.Context
@@ -128,7 +128,7 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
             Log.d("AltimeterViewModel", "URL: $url")
             
             val httpResponse: HttpResponse = client.get(url) {
-                header("User-Agent", "Mozilla/5.0 (Android; Horizon1 Altimeter App)")
+                header("User-Agent", "Mozilla/5.0 (Android; horizon2 Altimeter App)")
                 header("Accept", "application/json")
             }
             
@@ -235,3 +235,7 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
         sensorManager.unregisterListener(this)
     }
 }
+
+
+
+

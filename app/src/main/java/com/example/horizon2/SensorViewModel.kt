@@ -1,4 +1,4 @@
-package com.example.horizon1
+package com.example.horizon2
 
 import android.app.Application
 import android.content.Context
@@ -444,3 +444,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
     override fun onCleared() { super.onCleared(); sensorManager.unregisterListener(this) }
 }
+
+
+
+

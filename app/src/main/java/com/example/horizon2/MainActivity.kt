@@ -1,4 +1,4 @@
-package com.example.horizon1
+package com.example.horizon2
 
 import android.Manifest
 import android.os.Bundle
@@ -27,8 +27,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.horizon1.ui.CameraPreview
-import com.example.horizon1.ui.OverlayView
+import com.example.horizon2.ui.CameraPreview
+import com.example.horizon2.ui.OverlayView
 
 class MainActivity : ComponentActivity() {
 
@@ -255,3 +255,8 @@ fun SettingsDialog(
         }
     )
 }
+
+
+
+
+

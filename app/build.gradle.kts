@@ -8,11 +8,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.horizon1"
+    namespace = "com.example.horizon2"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.horizon1"
+        applicationId = "com.example.horizon2"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
@@ -45,7 +45,7 @@ tasks.register("copyApkToRoot") {
     doLast {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
         val sourceFile = file("${layout.buildDirectory.get()}/outputs/apk/debug/app-debug.apk")
-        val destinationFile = file("${project.rootProject.projectDir.path}/Horizon1_$timestamp.apk")
+        val destinationFile = file("${project.rootProject.projectDir.path}/Horizon2_$timestamp.apk")
         if (sourceFile.exists()) {
             sourceFile.copyTo(destinationFile, overwrite = true)
             println("APK copied to: ${destinationFile.path}")
