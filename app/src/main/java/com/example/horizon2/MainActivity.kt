@@ -7,11 +7,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -23,14 +26,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.horizon2.ui.CameraPreview
 import com.example.horizon2.ui.OverlayView
+import androidx.compose.ui.graphics.Color
 
 class MainActivity : ComponentActivity() {
+
+    enum class AppMode {
+        ALTIMETER,
+        PLANES,
+        STARS,
+        SETTINGS,
+        CALIBRATE
+    }
 
     private val sensorViewModel: SensorViewModel by viewModels()
     private val locationViewModel: LocationViewModel by viewModels()
@@ -63,6 +77,8 @@ class MainActivity : ComponentActivity() {
             var showManualDialog by remember { mutableStateOf(false) }
             var manualHeadingInput by remember { mutableStateOf("") }
             var showSettings by remember { mutableStateOf(false) }
+            var selectedMode by remember { mutableStateOf(AppMode.ALTIMETER) }
+            var radioButtonsHeight by remember { mutableStateOf(0) }
 
             // Update display rotation
             val rotation = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
@@ -101,7 +117,9 @@ class MainActivity : ComponentActivity() {
                 OverlayView(
                     sensorData = sensorData,
                     altimeterData = altimeterData,
-                    onAltimeterClick = { altimeterViewModel.toggleDetail() }
+                    onAltimeterClick = { altimeterViewModel.toggleDetail() },
+                    onCaptureClick = { showManualDialog = true },
+                    appMode = selectedMode.name
                 )
 
                 if (showManualDialog) {
@@ -162,34 +180,68 @@ class MainActivity : ComponentActivity() {
                 }
 
                 // Calibration Control Buttons
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .navigationBarsPadding() // Ensures buttons are above system nav bar
-                        .padding(bottom = 32.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.Bottom,
+                        .padding(bottom = 32.dp, end = 16.dp),
+                    verticalArrangement = Arrangement.Bottom,
+                    horizontalAlignment = Alignment.End,
                 ) {
-                    if (sensorData.overlayAlpha > 0.5f) {
-                        Button(
-                            onClick = { sensorViewModel.captureManualOrientation() },
-                            enabled = sensorData.calibrationState == CalibrationState.CALIBRATED
+                    AppMode.values().forEach { mode ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable {
+                                selectedMode = mode
+                                when (mode) {
+                                    AppMode.CALIBRATE -> {
+                                        if (sensorData.overlayAlpha > 0.5f) {
+                                            sensorViewModel.captureManualOrientation()
+                                        } else {
+                                            showManualDialog = true
+                                        }
+                                    }
+                                    AppMode.SETTINGS -> {
+                                        showSettings = true
+                                    }
+                                    else -> {
+                                        // TBA
+                                    }
+                                }
+                            }
                         ) {
-                            Text("MANUAL")
-                        }
-                    } else {
-                        Button(
-                            onClick = { showManualDialog = true },
-                            enabled = sensorData.calibrationState == CalibrationState.CALIBRATED
-                        ) {
-                            Text("CAPTURE")
+                            Text(
+                                text = mode.name.lowercase().replaceFirstChar { it.uppercase() },
+                                color = Color.White
+                            )
+                            RadioButton(
+                                selected = selectedMode == mode,
+                                onClick = {
+                                    selectedMode = mode
+                                    when (mode) {
+                                        AppMode.CALIBRATE -> {
+                                            if (sensorData.overlayAlpha > 0.5f) {
+                                                sensorViewModel.captureManualOrientation()
+                                            } else {
+                                                showManualDialog = true
+                                            }
+                                        }
+                                        AppMode.SETTINGS -> {
+                                            showSettings = true
+                                        }
+                                        else -> {
+                                            // TBA
+                                        }
+                                    }
+                                },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = Color.Yellow,
+                                    unselectedColor = Color.White
+                                )
+                            )
                         }
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = { showSettings = true }) {
-                        Text("SETTINGS")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Button(onClick = { (context as? ComponentActivity)?.finish() }) {
                         Text("EXIT")
                     }
@@ -200,7 +252,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        sensorViewModel.pauseSensors()
+        altimeterViewModel.pauseSensors()
         locationViewModel.stopLocationUpdates()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        sensorViewModel.resumeSensors()
+        altimeterViewModel.resumeSensors()
+        locationViewModel.startLocationUpdates()
     }
 }
 
@@ -255,8 +316,3 @@ fun SettingsDialog(
         }
     )
 }
-
-
-
-
-
