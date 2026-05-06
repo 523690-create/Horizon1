@@ -52,6 +52,7 @@ data class SensorData(
     val whiteBubbleX: Float = 0f,
     val whiteBubbleY: Float = 0f,
     val hasBeenCalibrated: Boolean = false,
+    val sensorDelay: Int = SensorManager.SENSOR_DELAY_UI,
     val overlayAlpha: Float = 0.8f,
     val lastMetarStatus: String = ""
 )
@@ -63,7 +64,11 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     private val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
     private val gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
 
-    private val _uiState = MutableStateFlow(SensorData())
+    // Current settings
+    private var currentSensorDelay = SensorManager.SENSOR_DELAY_UI
+    private var currentOverlayAlpha = 0.8f
+
+    private val _uiState = MutableStateFlow(SensorData(sensorDelay = currentSensorDelay, overlayAlpha = currentOverlayAlpha))
     val uiState: StateFlow<SensorData> = _uiState.asStateFlow()
 
     private var gravity: FloatArray? = null
@@ -98,9 +103,9 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     private val alpha = 0.1f
 
     init {
-        sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI)
-        sensorManager.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_UI)
-        sensorManager.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_UI)
+        sensorManager.registerListener(this, accelerometer, currentSensorDelay)
+        sensorManager.registerListener(this, magnetometer, currentSensorDelay)
+        sensorManager.registerListener(this, gyroscope, currentSensorDelay)
     }
 
     fun startOrientationCalibration() {
@@ -163,7 +168,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             val offset = (trueHeading - gyroOrientation.azimuth + 540) % 360 - 180
             manualNorthOffset = offset
             _uiState.value = _uiState.value.copy(
-                overlayAlpha = 0.8f,
+                overlayAlpha = currentOverlayAlpha,
                 isManualCalibrated = true,
                 manualCalibrationTime = System.currentTimeMillis()
             )
@@ -171,7 +176,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     }
 
     fun cancelManualCalibration() {
-        _uiState.value = _uiState.value.copy(overlayAlpha = 0.8f)
+        _uiState.value = _uiState.value.copy(overlayAlpha = currentOverlayAlpha)
     }
 
     fun setDisplayRotation(rotation: Int) {
@@ -180,6 +185,20 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
 
     fun updateMetarStatus(status: String) {
         _uiState.value = _uiState.value.copy(lastMetarStatus = status)
+    }
+
+    fun updateSensorDelay(delay: Int) {
+        currentSensorDelay = delay
+        sensorManager.unregisterListener(this)
+        sensorManager.registerListener(this, accelerometer, delay)
+        sensorManager.registerListener(this, magnetometer, delay)
+        sensorManager.registerListener(this, gyroscope, delay)
+        _uiState.value = _uiState.value.copy(sensorDelay = delay)
+    }
+
+    fun updateOverlayAlpha(alpha: Float) {
+        currentOverlayAlpha = alpha
+        _uiState.value = _uiState.value.copy(overlayAlpha = alpha)
     }
 
     override fun onSensorChanged(event: SensorEvent) {

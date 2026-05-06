@@ -207,7 +207,7 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
     override fun onSensorChanged(event: SensorEvent) {
         if (event.sensor.type == Sensor.TYPE_PRESSURE) {
             val now = System.currentTimeMillis()
-            if (now - lastPressureUpdateTime >= 1000L) {
+            if (now - lastPressureUpdateTime >= 2000L) {
                 currentPressure = event.values[0]
                 _uiState.value = _uiState.value.copy(rawPressureHpa = currentPressure)
                 if (_uiState.value.airports.isNotEmpty()) {

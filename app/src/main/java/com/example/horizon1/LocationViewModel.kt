@@ -29,11 +29,13 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
     private val _locationState = MutableStateFlow(LocationData())
     val locationState: StateFlow<LocationData> = _locationState.asStateFlow()
 
-    private val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000)
-        .setMinUpdateIntervalMillis(500)
+    private var currentIntervalMillis = 5000L
+    private var currentMinIntervalMillis = 2000L
+    private var locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, currentIntervalMillis)
+        .setMinUpdateIntervalMillis(currentMinIntervalMillis)
         .build()
 
-    private val locationCallback = object : LocationCallback() {
+    private val locationCallback: LocationCallback = object : LocationCallback() {
         override fun onLocationResult(locationResult: LocationResult) {
             locationResult.lastLocation?.let { location ->
                 _locationState.value = LocationData(
@@ -47,7 +49,24 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
                     accuracy = location.accuracy,
                     verticalAccuracy = location.verticalAccuracyMeters,
                 )
+                // Dynamic location update adjustment based on speed
+                val newInterval = if (_locationState.value.speed > 5f) 2000L else 5000L
+                val newMinInterval = if (_locationState.value.speed > 5f) 1000L else 2000L
+                updateLocationRequestIfNeeded(newInterval, newMinInterval)
             }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun updateLocationRequestIfNeeded(newInterval: Long, newMinInterval: Long) {
+        if (newInterval != currentIntervalMillis) {
+            currentIntervalMillis = newInterval
+            currentMinIntervalMillis = newMinInterval
+            fusedLocationClient.removeLocationUpdates(locationCallback)
+            locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, currentIntervalMillis)
+                .setMinUpdateIntervalMillis(currentMinIntervalMillis)
+                .build()
+            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, null)
         }
     }
 

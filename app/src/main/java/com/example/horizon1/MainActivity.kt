@@ -12,8 +12,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,7 +62,8 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             var showManualDialog by remember { mutableStateOf(false) }
             var manualHeadingInput by remember { mutableStateOf("") }
-            
+            var showSettings by remember { mutableStateOf(false) }
+
             // Update display rotation
             val rotation = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 context.display.rotation
@@ -148,6 +151,16 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
+                if (showSettings) {
+                    SettingsDialog(
+                        currentDelay = sensorData.sensorDelay,
+                        currentAlpha = sensorData.overlayAlpha,
+                        onDismiss = { showSettings = false },
+                        onUpdateDelay = { sensorViewModel.updateSensorDelay(it) },
+                        onUpdateAlpha = { sensorViewModel.updateOverlayAlpha(it) }
+                    )
+                }
+
                 // Calibration Control Buttons
                 Row(
                     modifier = Modifier
@@ -173,6 +186,10 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = { showSettings = true }) {
+                        Text("SETTINGS")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Button(onClick = { (context as? ComponentActivity)?.finish() }) {
                         Text("EXIT")
                     }
@@ -185,4 +202,56 @@ class MainActivity : ComponentActivity() {
         super.onPause()
         locationViewModel.stopLocationUpdates()
     }
+}
+
+@Composable
+fun SettingsDialog(
+    currentDelay: Int,
+    currentAlpha: Float,
+    onDismiss: () -> Unit,
+    onUpdateDelay: (Int) -> Unit,
+    onUpdateAlpha: (Float) -> Unit
+) {
+    var selectedDelay by remember { mutableStateOf(currentDelay) }
+    var selectedAlpha by remember { mutableStateOf(currentAlpha) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Settings") },
+        text = {
+            Column {
+                Text("Sensor Delay")
+                Row {
+                    Button(onClick = { selectedDelay = android.hardware.SensorManager.SENSOR_DELAY_FASTEST }) { Text("Fastest") }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Button(onClick = { selectedDelay = android.hardware.SensorManager.SENSOR_DELAY_GAME }) { Text("Game") }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Button(onClick = { selectedDelay = android.hardware.SensorManager.SENSOR_DELAY_UI }) { Text("UI") }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Button(onClick = { selectedDelay = android.hardware.SensorManager.SENSOR_DELAY_NORMAL }) { Text("Normal") }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Overlay Alpha: ${"%.2f".format(selectedAlpha)}")
+                Slider(
+                    value = selectedAlpha,
+                    onValueChange = { selectedAlpha = it },
+                    valueRange = 0.1f..1.0f
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                onUpdateDelay(selectedDelay)
+                onUpdateAlpha(selectedAlpha)
+                onDismiss()
+            }) {
+                Text("SAVE")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("CANCEL")
+            }
+        }
+    )
 }

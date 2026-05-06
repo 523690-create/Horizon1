@@ -1,0 +1,9 @@
+isPrevious: true
+Build: google/sdk_gphone16k_x86_64/emu64xa16k:17/CP21.260330.005/15181570:userdebug/dev-keys
+Hardware: goldfish_x86_64
+Revision: 0
+Bootloader: unknown
+Radio: 1.0.0.0
+Kernel: Linux version 6.12.58-android16-6-gccafb60de224-ab14828483 (kleaf@build-host) (Android (14043575, +pgo, +bolt, +lto, +mlgo, based on r536225) clang version 19.0.1 (https://android.googlesource.com/toolchain/llvm-project b3a530ec6537146650e42be89f1089e9a3588460), LLD 19.0.1) #1 SMP PREEMPT Tue Feb  3 03:46:47 UTC 2026
+PageSize: 16384
+
