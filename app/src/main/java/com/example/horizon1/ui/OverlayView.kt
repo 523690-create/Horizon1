@@ -88,10 +88,6 @@ fun OverlayView(
                 drawCircle(color = ComposeColor.Green, alpha = 0.3f, radius = 10.dp.toPx(), center = Offset(centerX, centerY))
                 drawLine(color = ComposeColor.Green, alpha = 0.15f, start = Offset(centerX - 20.dp.toPx(), centerY), end = Offset(centerX + 20.dp.toPx(), centerY), strokeWidth = 1.dp.toPx())
                 drawLine(color = ComposeColor.Green, alpha = 0.15f, start = Offset(centerX, centerY - 20.dp.toPx()), end = Offset(centerX, centerY + 20.dp.toPx()), strokeWidth = 1.dp.toPx())
-
-                // MAG text in center
-                val magText = "MAG: ${sensorData.headingString}"
-                drawContext.canvas.nativeCanvas.drawText(magText, centerX, centerY + 50.dp.toPx(), Paint(textPaintYellow).apply { textAlign = Paint.Align.CENTER })
             } else {
                 // Normal Line Display
                 rotate(degrees = sensorData.roll, pivot = Offset(centerX, centerY)) {
@@ -100,11 +96,6 @@ fun OverlayView(
                     drawRect(color = ComposeColor.Green, alpha = 0.20f, topLeft = Offset(-width * 2, horizonY - (barThickness / 2)), size = androidx.compose.ui.geometry.Size(width * 5, barThickness))
                     drawRect(color = ComposeColor.Green, alpha = 0.20f, topLeft = Offset(centerX - (barThickness / 2), -height * 2), size = androidx.compose.ui.geometry.Size(barThickness, height * 5))
                     drawCircle(color = ComposeColor.Yellow, alpha = 0.11f, radius = barThickness, center = Offset(centerX, horizonY))
-
-                    // MAG text: Left justified along horizontal green line
-                    val magText = "MAG: ${sensorData.headingString}"
-                    val magDrawY = (horizonY - (barThickness / 2) - 5f).coerceIn(20.dp.toPx(), height - 20.dp.toPx())
-                    drawContext.canvas.nativeCanvas.drawText(magText, 10.dp.toPx(), magDrawY, textPaintYellow)
                 }
             }
 
@@ -115,15 +106,6 @@ fun OverlayView(
                     val bubbleX = centerX + (sensorData.whiteBubbleX * sensitivity)
                     val bubbleY = centerY + (sensorData.whiteBubbleY * sensitivity)
                     drawCircle(color = ComposeColor.White, alpha = 0.8f, radius = 20.dp.toPx(), center = Offset(bubbleX, bubbleY), style = Stroke(width = 3.dp.toPx()))
-                    
-                    // True Bearing in center
-                    if (sensorData.isGpsCalibrated || sensorData.isManualCalibrated) {
-                        val paint = Paint(textPaintWhite).apply { 
-                            textAlign = Paint.Align.CENTER 
-                            textSize = with(density) { 24.dp.toPx() }
-                        }
-                        drawContext.canvas.nativeCanvas.drawText(sensorData.trueHeadingString, centerX, centerY - 40.dp.toPx(), paint)
-                    }
                 } else {
                     rotate(degrees = sensorData.trueRoll, pivot = Offset(centerX, centerY)) {
                         val trueY = centerY + (sensorData.truePitch * sensitivity)
@@ -149,17 +131,6 @@ fun OverlayView(
                         // Vertical line
                         drawLine(color = ComposeColor.White, alpha = 0.90f, start = Offset(centerX, -height * 2), end = Offset(centerX, height * 5), strokeWidth = 2.dp.toPx())
                         
-                        // Persistent Center Bearing: Left of vertical axis
-                        if (sensorData.isGpsCalibrated || sensorData.isManualCalibrated) {
-                            rotate(degrees = -sensorData.trueRoll, pivot = Offset(centerX - 15.dp.toPx(), centerY)) {
-                                val paint = Paint(textPaintWhite).apply { 
-                                    textAlign = Paint.Align.RIGHT 
-                                    textSize = with(density) { 20.dp.toPx() }
-                                }
-                                drawContext.canvas.nativeCanvas.drawText(sensorData.trueHeadingString, centerX - 15.dp.toPx(), centerY + 7.dp.toPx(), paint)
-                            }
-                        }
-
                         // Vertical Ticks (every 15 degrees)
                         for (pitch in -180..180 step 15) {
                             val delta = pitch - sensorData.trueFullPitch
@@ -172,22 +143,6 @@ fun OverlayView(
                                     drawContext.canvas.nativeCanvas.drawText("${label.toInt()}", centerX + 60.dp.toPx(), tickY + 5.dp.toPx(), textPaintWhite)
                                 }
                             }
-                        }
-                        
-                        // Recency prioritization
-                        val manualRecent = sensorData.manualCalibrationTime > sensorData.gpsCalibrationTime
-                        val gpsAlpha = if (!manualRecent || !sensorData.isManualCalibrated) 0.90f else 0.50f
-                        val manualAlpha = if (manualRecent || !sensorData.isGpsCalibrated) 0.90f else 0.50f
-
-                        if (sensorData.isGpsCalibrated) {
-                            val trueText = "True (GPS): ${sensorData.gpsHeadingString}"
-                            val paint = Paint(textPaintWhite).apply { alpha = (255 * gpsAlpha).toInt() }
-                            drawContext.canvas.nativeCanvas.drawText(trueText, width - 10.dp.toPx(), trueY - 15.dp.toPx(), paint)
-                        }
-                        if (sensorData.isManualCalibrated) {
-                            val trueText = "True (manual): ${sensorData.manualHeadingString}"
-                            val paint = Paint(textPaintWhite).apply { alpha = (255 * manualAlpha).toInt() }
-                            drawContext.canvas.nativeCanvas.drawText(trueText, width - 10.dp.toPx(), trueY + 25.dp.toPx(), paint)
                         }
                     }
                 }
@@ -210,7 +165,7 @@ fun OverlayView(
                 .clickable { onAltimeterClick() }
         ) {
             Text(
-                text = "${altimeterData.rawPressureHpa} hPa",
+                text = "${String.format("%.1f", altimeterData.rawPressureHpa)} hPa",
                 color = ComposeColor.Yellow,
                 style = MaterialTheme.typography.titleLarge
             )
@@ -224,6 +179,28 @@ fun OverlayView(
                 color = ComposeColor.Gray,
                 style = MaterialTheme.typography.labelSmall
             )
+            
+            // Consolidated Heading Block
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "MAG ${sensorData.headingString}",
+                color = ComposeColor.Green,
+                style = MaterialTheme.typography.titleSmall
+            )
+            if (sensorData.isManualCalibrated) {
+                Text(
+                    text = "MAN ${sensorData.manualHeadingString}",
+                    color = ComposeColor.Yellow,
+                    style = MaterialTheme.typography.titleSmall
+                )
+            }
+            if (sensorData.isGpsCalibrated) {
+                Text(
+                    text = "MOV ${sensorData.gpsHeadingString}",
+                    color = ComposeColor.White,
+                    style = MaterialTheme.typography.titleSmall
+                )
+            }
         }
 
         // 5. Airport Overlay
@@ -233,11 +210,12 @@ fun OverlayView(
                     .fillMaxSize()
                     .background(ComposeColor.Black.copy(alpha = 0.8f))
                     .clickable { onAltimeterClick() }
-                    .padding(32.dp),
+                    .padding(16.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
                     modifier = Modifier
+                        .fillMaxWidth()
                         .background(ComposeColor.DarkGray.copy(alpha = 0.9f))
                         .padding(16.dp)
                 ) {
@@ -248,11 +226,19 @@ fun OverlayView(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     altimeterData.airports.forEach { airport ->
-                        Row(modifier = Modifier.padding(vertical = 4.dp)) {
-                            Text(airport.code, color = ComposeColor.Yellow, modifier = Modifier.width(60.dp))
-                            Text("${airport.distanceKm.toInt()}km", color = ComposeColor.White, modifier = Modifier.width(80.dp))
-                            Text("${airport.pressureHpa.toInt()}hPa", color = ComposeColor.White, modifier = Modifier.width(80.dp))
-                            Text("${airport.elevationM.toInt()}m", color = ComposeColor.White)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "${airport.code} ${airport.distanceKm.toInt()}km ${airport.pressureHpa.toInt()}hPa ${airport.elevationM.toInt()}m ${airport.reportTime}",
+                                color = ComposeColor.White,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
                 }

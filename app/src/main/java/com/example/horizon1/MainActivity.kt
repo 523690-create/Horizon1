@@ -89,6 +89,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            LaunchedEffect(altimeterData.status) {
+                sensorViewModel.updateMetarStatus(altimeterData.status)
+            }
+
             Box(modifier = Modifier.fillMaxSize()) {
                 CameraPreview()
                 OverlayView(
