@@ -490,20 +490,21 @@ fun PlanesOverlay(
                             }
                         }
 
-                        // Control Toggles (bottom-right, labels underneath)
+                        // Control Toggles (bottom-left, labels underneath)
                         Column(
                             modifier = Modifier
-                                .align(Alignment.BottomStart)   // move to lower right
-                                .padding(start = 155.dp, bottom = 1.dp),
+                                .align(Alignment.BottomStart)
+                                .padding(start = 185.dp, bottom = 10.dp)
+                                .width(60.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(100.dp)
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             // Verbose Toggle
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Switch(
                                     checked = sensorData.isVerbose,
                                     onCheckedChange = { onVerboseToggle() },
-                                    modifier = Modifier.scale(0.90f),   // doubled size
+                                    modifier = Modifier.scale(0.7f),
                                     colors = SwitchDefaults.colors(
                                         checkedThumbColor = ComposeColor.Yellow,
                                         uncheckedThumbColor = ComposeColor.Gray,
@@ -512,7 +513,7 @@ fun PlanesOverlay(
                                     )
                                 )
                                 Text(
-                                    "Verbose",
+                                    "V",
                                     color = ComposeColor.White,
                                     style = MaterialTheme.typography.labelSmall
                                 )
@@ -523,7 +524,7 @@ fun PlanesOverlay(
                                 Switch(
                                     checked = sensorData.showGrounded,
                                     onCheckedChange = { onGroundedToggle() },
-                                    modifier = Modifier.scale(0.90f),   // doubled size
+                                    modifier = Modifier.scale(0.7f),
                                     colors = SwitchDefaults.colors(
                                         checkedThumbColor = ComposeColor.Green,
                                         uncheckedThumbColor = ComposeColor.Gray,
@@ -532,7 +533,7 @@ fun PlanesOverlay(
                                     )
                                 )
                                 Text(
-                                    "Grounded",
+                                    "G",
                                     color = ComposeColor.White,
                                     style = MaterialTheme.typography.labelSmall
                                 )

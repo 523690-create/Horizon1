@@ -39,7 +39,9 @@ data class AircraftData(
     val distanceKm: Float,
     val bearingDegrees: Float,
     val tailNumber: String = "",
-    val aircraftType: String = ""
+    val aircraftType: String = "",
+    val origin: String = "",
+    val destination: String = ""
 )
 
 data class CelestialObject(
@@ -139,7 +141,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         sensorManager.registerListener(this, accelerometer, currentSensorDelay)
         sensorManager.registerListener(this, magnetometer, currentSensorDelay)
         sensorManager.registerListener(this, gyroscope, currentSensorDelay)
-        
+
         startAircraftRefreshLoop()
     }
 
@@ -349,35 +351,62 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             accelHistory.removeAt(0)
         }
 
-        // 3. Stability check (need at least 1 second of data)
+        // 3. Precise Stability check (2 seconds window)
         if (accelHistory.isNotEmpty() && (currentTime - accelHistory.first().first) >= CALIBRATION_WINDOW_MS) {
             // Calculate average vector
             var avgX = 0f; var avgY = 0f; var avgZ = 0f
+            var avgMag = 0f
             for (sample in accelHistory) {
                 avgX += sample.second[0]; avgY += sample.second[1]; avgZ += sample.second[2]
+                avgMag += sample.third
             }
             avgX /= accelHistory.size; avgY /= accelHistory.size; avgZ /= accelHistory.size
+            avgMag /= accelHistory.size
 
-            // Calculate max deviation from average (Vector Jitter)
-            var maxDevSq = 0f
-            for (sample in accelHistory) {
-                val dx = sample.second[0] - avgX; val dy = sample.second[1] - avgY; val dz = sample.second[2] - avgZ
-                val devSq = dx*dx + dy*dy + dz*dz
-                if (devSq > maxDevSq) maxDevSq = devSq
-            }
-
-            // If the maximum vector deviation is within threshold, device is stationary
-            // Threshold is squared here for efficiency: 0.1g ~ 0.98 m/s^2 -> 0.98^2 ~ 0.96
-            if (maxDevSq <= (STABILITY_THRESHOLD * STABILITY_THRESHOLD)) {
-                // Snap together: Copy fused (accelerometer-based) to gyroOnly
-                gyroOnlyMatrix = fusedMatrix.clone()
-                lastCalibrationTime = currentTime
-                _uiState.value = _uiState.value.copy(
-                    calibrationState = CalibrationState.CALIBRATED,
-                    hasBeenCalibrated = true
-                )
+            // Scalar check: 1G (9.81 m/s^2) +/- 0.1G (0.98 m/s^2)
+            val g = 9.81f
+            val gThreshold = 0.98f
+            if (abs(avgMag - g) > gThreshold) {
                 accelHistory.clear()
+                return
             }
+
+            // Vector check: +/- 2.5 degrees stability
+            // Angular difference between each sample and the average must be < 2.5 deg
+            val stabilityThresholdDeg = 2.5f
+            val cosThreshold = cos(Math.toRadians(stabilityThresholdDeg.toDouble())).toFloat()
+            
+            val avgNorm = sqrt(avgX*avgX + avgY*avgY + avgZ*avgZ)
+            
+            for (sample in accelHistory) {
+                val s = sample.second
+                val sNorm = sqrt(s[0]*s[0] + s[1]*s[1] + s[2]*s[2])
+                if (sNorm == 0f || avgNorm == 0f) continue
+                
+                // Dot product / (norm1 * norm2) = cos(theta)
+                val dot = (s[0]*avgX + s[1]*avgY + s[2]*avgZ) / (sNorm * avgNorm)
+                if (dot < cosThreshold) {
+                    accelHistory.clear()
+                    return
+                }
+            }
+
+            // If all checks pass, "snap" the orientation (level the horizon)
+            // DECUPLE COMPASS: We ONLY update gyroOnlyMatrix from fusedMatrix
+            // We DO NOT modify manualNorthOffset or gpsNorthOffset here.
+
+             gyroOnlyMatrix = fusedMatrix.clone()
+
+            // ------ COPILOT replacement
+
+             // -- END COPILOT CODE
+            lastCalibrationTime = currentTime
+            _uiState.value = _uiState.value.copy(
+                calibrationState = CalibrationState.CALIBRATED,
+                hasBeenCalibrated = true
+            )
+            accelHistory.clear()
+            android.util.Log.d("AutoCalibrate", "Orientation snapped at scalar ${avgMag}m/s^2")
         }
     }
 

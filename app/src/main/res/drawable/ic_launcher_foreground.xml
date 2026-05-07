@@ -1,19 +1,64 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Horizontal Crosshair -->
-    <path
-        android:strokeColor="@color/white"
-        android:strokeWidth="2"
-        android:pathData="M24,54 L84,54" />
-    <!-- Vertical Crosshair -->
-    <path
-        android:strokeColor="@color/white"
-        android:strokeWidth="2"
-        android:pathData="M54,24 L54,84" />
+android:width="108dp"
+android:height="108dp"
+android:viewportWidth="108"
+android:viewportHeight="108">
+
+<!-- Horizontal Crosshair -->
+<path
+    android:strokeColor="@color/white"
+    android:strokeWidth="2"
+    android:pathData="M24,54 L84,54" />
+
+<!-- Vertical Crosshair -->
+<path
+    android:strokeColor="@color/white"
+    android:strokeWidth="2"
+    android:pathData="M54,24 L54,84" />
+
+<!-- ========================================================= -->
+<!--  LOWER QUADRANT ARCS (centered at crosshair, radius = 25) -->
+<!-- ========================================================= -->
+
+<!-- Lower-left arc: from 180° to 270° -->
+<path
+    android:strokeColor="@color/white"
+    android:strokeWidth="2"
+    android:fillColor="@android:color/transparent"
+    android:pathData="
+            M29,54
+            A25,25 0 0,1 54,79" />
+
+<!-- Lower-right arc: from 270° to 360° -->
+<path
+    android:strokeColor="@color/white"
+    android:strokeWidth="2"
+    android:fillColor="@android:color/transparent"
+    android:pathData="
+            M54,79
+            A25,25 0 0,1 79,54" />
+
+<!-- ========================================= -->
+<!--  PENTAGRAM (center 72,72; radius = 20)     -->
+<!-- ========================================= -->
+
+<path
+    android:strokeColor="@color/white"
+    android:strokeWidth="2"
+    android:fillColor="@android:color/transparent"
+    android:pathData="
+            M72,52
+            L78.2,67.6
+            L94,67.6
+            L81,78.4
+            L86,94
+            L72,84
+            L58,94
+            L63,78.4
+            L50,67.6
+            L65.8,67.6
+            Z" />
 </vector>
 
 
