@@ -228,20 +228,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         }
     }
 
-    fun calibrateWithLandmark(landmarkBearing: Float) {
-        if (_uiState.value.calibrationState == CalibrationState.CALIBRATED) {
-            val gyroOrientation = getOrientationFromMatrix(gyroOnlyMatrix)
-            
-            // Offset = LandmarkTrueBearing - CurrentGyroAzimuth
-            val offset = (landmarkBearing - gyroOrientation.azimuth + 540) % 360 - 180
-            manualNorthOffset = offset
-            
-            _uiState.value = _uiState.value.copy(
-                isManualCalibrated = true,
-                manualCalibrationTime = System.currentTimeMillis()
-            )
-        }
-    }
+
 
     fun captureManualOrientation() {
         if (_uiState.value.calibrationState == CalibrationState.CALIBRATED) {
