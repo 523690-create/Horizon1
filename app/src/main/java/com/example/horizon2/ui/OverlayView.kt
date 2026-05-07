@@ -490,21 +490,22 @@ fun PlanesOverlay(
                             }
                         }
 
-                        // Control Toggles (bottom-left, labels underneath)
+                        // Control Toggles (Moved left to avoid slider interference)
                         Column(
                             modifier = Modifier
                                 .align(Alignment.BottomStart)
-                                .padding(start = 185.dp, bottom = 10.dp)
-                                .width(60.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                                .padding(start = 100.dp, bottom = 10.dp)
+                                .width(80.dp),
+                            horizontalAlignment = Alignment.Start,
+                            verticalArrangement = Arrangement.spacedBy(0.dp)
                         ) {
                             // Verbose Toggle
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("V", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall)
                                 Switch(
                                     checked = sensorData.isVerbose,
                                     onCheckedChange = { onVerboseToggle() },
-                                    modifier = Modifier.scale(0.7f),
+                                    modifier = Modifier.scale(0.45f),
                                     colors = SwitchDefaults.colors(
                                         checkedThumbColor = ComposeColor.Yellow,
                                         uncheckedThumbColor = ComposeColor.Gray,
@@ -512,30 +513,21 @@ fun PlanesOverlay(
                                         uncheckedTrackColor = ComposeColor.Black
                                     )
                                 )
-                                Text(
-                                    "V",
-                                    color = ComposeColor.White,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
                             }
 
                             // Grounded Toggle
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("G", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall)
                                 Switch(
                                     checked = sensorData.showGrounded,
                                     onCheckedChange = { onGroundedToggle() },
-                                    modifier = Modifier.scale(0.7f),
+                                    modifier = Modifier.scale(0.45f),
                                     colors = SwitchDefaults.colors(
                                         checkedThumbColor = ComposeColor.Green,
                                         uncheckedThumbColor = ComposeColor.Gray,
                                         checkedTrackColor = ComposeColor.DarkGray,
                                         uncheckedTrackColor = ComposeColor.Black
                                     )
-                                )
-                                Text(
-                                    "G",
-                                    color = ComposeColor.White,
-                                    style = MaterialTheme.typography.labelSmall
                                 )
                             }
                         }

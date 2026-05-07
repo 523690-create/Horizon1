@@ -142,6 +142,11 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         sensorManager.registerListener(this, magnetometer, currentSensorDelay)
         sensorManager.registerListener(this, gyroscope, currentSensorDelay)
 
+        viewModelScope.launch {
+            aircraftRepository.checkConnectivity()
+            aircraftRepository.fetchEnrichmentData()
+        }
+        
         startAircraftRefreshLoop()
     }
 
@@ -184,9 +189,17 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         val currentTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
         
         if (aircraft.isNotEmpty()) {
+            // Enrich data with full names
+            val enrichedAircraft = aircraft.map { ac ->
+                ac.copy(
+                    callsign = aircraftRepository.getAirlineName(ac.callsign) ?: ac.callsign,
+                    aircraftType = aircraftRepository.getAircraftName(ac.aircraftType) ?: ac.aircraftType
+                )
+            }
+
             _uiState.value = _uiState.value.copy(
                 lastAdbSource = source,
-                nearbyAircraft = aircraft,
+                nearbyAircraft = enrichedAircraft,
                 lastAdbUpdateTime = currentTime
             )
             android.util.Log.d("AircraftRefresh", "Fetched ${aircraft.size} planes from $source at $lastLat, $lastLon (fixed 100km fetch) at $currentTime")

@@ -2,6 +2,7 @@ package com.example.horizon2
 
 import io.ktor.client.*
 import io.ktor.client.call.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -24,18 +25,23 @@ class AircraftRepository {
                 isLenient = true
             })
         }
+        install(HttpTimeout) {
+            requestTimeoutMillis = 15000
+            connectTimeoutMillis = 10000
+        }
     }
 
     // Enrichment Data Maps
     private val airlineMap = mutableMapOf<String, String>() // ICAO -> Name
     private val aircraftMap = mutableMapOf<String, String>() // ICAO Type -> Name
-    private val routeMap = mutableMapOf<String, Pair<String, String>>() // Callsign -> Origin/Dest
+    // For routes, we'll store a simple string for now if we can find a match
+    private val routeMap = mutableMapOf<String, String>() // Airline+Dest? This is tricky without a unique key
 
     suspend fun checkConnectivity(): Boolean {
         return try {
-            val response = client.get("https://www.google.com")
-            android.util.Log.d("AircraftRepo", "Connectivity check: ${response.status}")
-            response.status.value in 200..299
+            val response = client.get("https://raw.githubusercontent.com/jpatokal/openflights/master/data/airlines.dat")
+            android.util.Log.d("AircraftRepo", "Connectivity check status: ${response.status}")
+            true
         } catch (e: Exception) {
             android.util.Log.e("AircraftRepo", "Connectivity check failed: ${e.message}")
             false
@@ -57,7 +63,7 @@ class AircraftRepository {
                 }
             }
             android.util.Log.d("AircraftRepo", "Loaded ${airlineMap.size} airlines")
-        } catch (e: Exception) { android.util.Log.e("AircraftRepo", "Airlines fetch failed") }
+        } catch (e: Exception) { android.util.Log.e("AircraftRepo", "Airlines fetch failed: ${e.message}") }
 
         // 2. Aircraft (OpenTravelData)
         try {
@@ -71,23 +77,7 @@ class AircraftRepository {
                 }
             }
             android.util.Log.d("AircraftRepo", "Loaded ${aircraftMap.size} aircraft types")
-        } catch (e: Exception) { android.util.Log.e("AircraftRepo", "Aircraft fetch failed") }
-
-        // 3. Routes (OpenFlights)
-        try {
-            val routes = client.get("https://raw.githubusercontent.com/jpatokal/openflights/master/data/routes.dat").bodyAsText()
-            routes.lineSequence().forEach { line ->
-                val parts = line.split(",")
-                if (parts.size > 4) {
-                    val airlineIcao = parts[0].trim()
-                    val origin = parts[2].trim()
-                    val dest = parts[4].trim()
-                    // We don't have flight numbers easily here, but we can index by Airline+Something?
-                    // Actually callsign is often AirlineICAO + FlightNumber.
-                    // This is hard to map perfectly without a full schedule API.
-                }
-            }
-        } catch (e: Exception) { }
+        } catch (e: Exception) { android.util.Log.e("AircraftRepo", "Aircraft fetch failed: ${e.message}") }
     }
 
     fun getAirlineName(callsign: String): String? {
@@ -120,10 +110,8 @@ class AircraftRepository {
                     val dist = calculateDistance(lat, lon, aLat, aLon)
                     val bearing = calculateBearing(lat, lon, aLat, aLon)
                     
-                    val callsign = state[1].jsonPrimitive.content.trim()
-                    
                     AircraftData(
-                        callsign = callsign.ifEmpty { "Unknown" },
+                        callsign = state[1].jsonPrimitive.content.trim().ifEmpty { "Unknown" },
                         lat = aLat,
                         lon = aLon,
                         altitudeM = state[7].jsonPrimitive.floatOrNull ?: 0f,
@@ -257,8 +245,10 @@ class AircraftRepository {
         val phi1 = Math.toRadians(lat1)
         val phi2 = Math.toRadians(lat2)
         val deltaLambda = Math.toRadians(lon2 - lon1)
+
         val y = sin(deltaLambda) * cos(phi2)
         val x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(deltaLambda)
+
         return (Math.toDegrees(atan2(y, x)) + 360) % 360
     }
 }
