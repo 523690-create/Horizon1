@@ -496,7 +496,7 @@ fun PlanesOverlay(
                                 .align(Alignment.BottomStart)   // move to lower right
                                 .padding(start = 155.dp, bottom = 1.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(1.dp)
+                            verticalArrangement = Arrangement.spacedBy(100.dp)
                         ) {
                             // Verbose Toggle
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -543,7 +543,7 @@ fun PlanesOverlay(
                         Box(
                             modifier = Modifier
                                 .align(Alignment.CenterEnd)
-                                .width(80.dp) 
+                                .width(260.dp)
                                 .fillMaxHeight(),
                             contentAlignment = Alignment.TopStart
                         ) {
@@ -565,17 +565,19 @@ fun PlanesOverlay(
                                     "Airplanes.Live" -> "AL"
                                     else -> "N/A"
                                 }
-                                Text(
-                                    text = shortSource,
-                                    color = ComposeColor.Gray,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                                
+
                                 Text(
                                     text = sensorData.lastAdbUpdateTime,
                                     color = ComposeColor.Gray,
                                     style = MaterialTheme.typography.labelSmall
                                 )
+
+                                Text(
+                                    text = shortSource,
+                                    color = ComposeColor.Gray,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+
                             }
 
                             Box(
