@@ -365,7 +365,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
 
             // Scalar check: 1G (9.81 m/s^2) +/- 0.1G (0.98 m/s^2)
             val g = 9.81f
-            val gThreshold = 0.98f
+            val gThreshold = 0.098f //manual edit
             if (abs(avgMag - g) > gThreshold) {
                 accelHistory.clear()
                 return
@@ -397,9 +397,6 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
 
              gyroOnlyMatrix = fusedMatrix.clone()
 
-            // ------ COPILOT replacement
-
-             // -- END COPILOT CODE
             lastCalibrationTime = currentTime
             _uiState.value = _uiState.value.copy(
                 calibrationState = CalibrationState.CALIBRATED,
