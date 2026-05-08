@@ -329,7 +329,13 @@ fun OverlayView(
                             drawCircle(color = color, radius = radius, center = Offset(screenX, screenY))
                             
                             val label = if (sensorData.showConstellations && obj.type == "star" && obj.bayer.isNotEmpty()) {
-                                obj.bayer.split(" ").first() // extract Greek letter
+                                // Only use Greek letter if star is part of a constellation line
+                                val isInConstellation = sensorData.constellationLines.any { it.first.bayer == obj.bayer || it.second.bayer == obj.bayer }
+                                if (isInConstellation) {
+                                    obj.bayer.split(" ").first() // extract Greek letter
+                                } else {
+                                    obj.name
+                                }
                             } else {
                                 obj.name
                             }

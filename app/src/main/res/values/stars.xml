@@ -53,5 +53,18 @@
         <item>Megrez;δ Ursae Majoris;3.31;183.856667;57.032222</item>
         <item>Mizar;ζ Ursae Majoris;2.23;200.081667;54.925278</item>
         <item>Imai;δ Crucis;2.79;182.420417;-58.75</item>
+        <!-- Cassiopeia -->
+        <item>Schedar;α Cassiopeiae;2.24;10.127083;56.537222</item>
+        <item>Caph;β Cassiopeiae;2.28;2.294583;59.149722</item>
+        <item>Tsih;γ Cassiopeiae;2.15;14.177083;60.716667</item>
+        <item>Ksora;δ Cassiopeiae;2.66;20.219583;60.235278</item>
+        <item>Segin;ε Cassiopeiae;3.35;28.599167;63.670278</item>
+        <!-- Leo (extra) -->
+        <item>Denebola;β Leonis;2.14;177.264583;14.572222</item>
+        <item>Algieba;γ Leonis;2.01;154.9925;19.841667</item>
+        <!-- Scorpius (extra) -->
+        <item>Sargas;θ Scorpii;1.86;264.33125;-42.997778</item>
+        <item>Dschubba;δ Scorpii;2.29;240.083333;-22.621667</item>
+        <item>Wei;ε Scorpii;2.29;252.545833;-34.2925</item>
     </string-array>
 </resources>

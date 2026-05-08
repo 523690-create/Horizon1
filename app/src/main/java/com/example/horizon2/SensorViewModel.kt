@@ -119,8 +119,9 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     // Constellation definitions (Bayer -> Bayer)
     private val constellations = mapOf(
         "Orion" to listOf(
-            "γ Orionis" to "α Orionis", "α Orionis" to "ζ Orionis", "ζ Orionis" to "ε Orionis",
-            "ε Orionis" to "δ Orionis", "δ Orionis" to "γ Orionis", "ζ Orionis" to "κ Orionis",
+            "α Orionis" to "γ Orionis", "γ Orionis" to "δ Orionis",
+            "δ Orionis" to "ε Orionis", "ε Orionis" to "ζ Orionis",
+            "ζ Orionis" to "α Orionis", "ζ Orionis" to "κ Orionis",
             "κ Orionis" to "β Orionis", "β Orionis" to "δ Orionis"
         ),
         "Ursa Major" to listOf(
@@ -129,17 +130,23 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             "δ Ursae Majoris" to "ε Ursae Majoris", "ε Ursae Majoris" to "ζ Ursae Majoris",
             "ζ Ursae Majoris" to "η Ursae Majoris"
         ),
+        "Cassiopeia" to listOf(
+            "β Cassiopeiae" to "α Cassiopeiae", "α Cassiopeiae" to "γ Cassiopeiae",
+            "γ Cassiopeiae" to "δ Cassiopeiae", "δ Cassiopeiae" to "ε Cassiopeiae"
+        ),
+        "Leo" to listOf(
+            "α Leonis" to "η Leonis", "η Leonis" to "γ Leonis", "γ Leonis" to "δ Leonis",
+            "δ Leonis" to "β Leonis", "δ Leonis" to "θ Leonis", "θ Leonis" to "α Leonis"
+        ),
         "Crux" to listOf(
             "γ Crucis" to "α Crucis", "β Crucis" to "δ Crucis"
         ),
-        "Centaurus" to listOf(
-            "α Centauri" to "β Centauri"
-        ),
-        "Canis Major" to listOf(
-            "α Canis Majoris" to "ε Canis Majoris"
-        ),
-        "Geminorum" to listOf(
-            "α Geminorum" to "β Geminorum", "β Geminorum" to "γ Geminorum"
+        "Scorpius" to listOf(
+            "β Scorpii" to "δ Scorpii", "δ Scorpii" to "π Scorpii", "π Scorpii" to "α Scorpii",
+            "α Scorpii" to "σ Scorpii", "σ Scorpii" to "τ Scorpii", "τ Scorpii" to "ε Scorpii",
+            "ε Scorpii" to "μ Scorpii", "μ Scorpii" to "ζ Scorpii", "ζ Scorpii" to "η Scorpii",
+            "η Scorpii" to "θ Scorpii", "θ Scorpii" to "ι Scorpii", "ι Scorpii" to "κ Scorpii",
+            "κ Scorpii" to "λ Scorpii", "λ Scorpii" to "ν Scorpii"
         )
     )
 
