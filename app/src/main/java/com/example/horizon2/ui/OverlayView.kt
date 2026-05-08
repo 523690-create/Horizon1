@@ -22,7 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntSize
@@ -32,6 +31,7 @@ import com.example.horizon2.SensorData
 import com.example.horizon2.AltimeterData
 import android.graphics.Paint
 import android.graphics.Typeface
+import java.util.Locale
 import java.time.*
 import java.time.format.*
 import kotlin.math.*
@@ -50,7 +50,7 @@ fun OverlayView(
 ) {
     val density = LocalDensity.current
     val altimeterSize = remember { mutableStateOf(IntSize.Zero) }
-    val altimeterPosition = remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val altimeterPosition = remember { mutableStateOf(Offset.Zero) }
     val textPaintYellow = remember(density) {
         Paint().apply {
             color = android.graphics.Color.YELLOW
@@ -86,9 +86,9 @@ fun OverlayView(
             val instant = Instant.parse(utcTime)
             val localDateTime = LocalDateTime.ofInstant(instant, ZoneId.systemDefault())
             val zone = ZoneId.systemDefault()
-            val shortId = zone.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.getDefault())
+            val shortId = zone.getDisplayName(TextStyle.SHORT, Locale.getDefault())
             "${localDateTime.format(DateTimeFormatter.ofPattern("HH:mm"))} $shortId"
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             try {
                 // Fallback to custom format (e.g., 2026-05-06 12:00:00)
                 val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
@@ -96,9 +96,9 @@ fun OverlayView(
                 val instant = utcDateTime.toInstant(ZoneOffset.UTC)
                 val localDateTime = LocalDateTime.ofInstant(instant, ZoneId.systemDefault())
                 val zone = ZoneId.systemDefault()
-                val shortId = zone.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.getDefault())
+                val shortId = zone.getDisplayName(TextStyle.SHORT, Locale.getDefault())
                 "${localDateTime.format(DateTimeFormatter.ofPattern("HH:mm"))} $shortId"
-            } catch (e2: Exception) {
+            } catch (_: Exception) {
                 // If all fail, return original
                 utcTime
             }
@@ -182,8 +182,8 @@ fun OverlayView(
                                 drawLine(color = ComposeColor.White, alpha = 0.90f, start = Offset(centerX - 10.dp.toPx(), tickY), end = Offset(centerX + 10.dp.toPx(), tickY), strokeWidth = 2.dp.toPx())
                                 
                                 rotate(degrees = -sensorData.trueRoll, pivot = Offset(centerX + 60.dp.toPx(), tickY + 5.dp.toPx())) {
-                                    val label = (if (pitch > 90) 180 - pitch else if (pitch < -90) -180 - pitch else pitch).toInt()
-                                    drawContext.canvas.nativeCanvas.drawText("$label", centerX + 60.dp.toPx(), tickY + 5.dp.toPx(), textPaintWhite)
+                                    val label = (if (pitch > 90) 180 - pitch else if (pitch < -90) -180 - pitch else pitch)
+                                    drawContext.canvas.nativeCanvas.drawText(label.toString(), centerX + 60.dp.toPx(), tickY + 5.dp.toPx(), textPaintWhite)
                                 }
                             }
                         }
@@ -274,17 +274,17 @@ fun OverlayView(
                  .clickable { onAltimeterClick() }
                  .onGloballyPositioned { coordinates ->
                      altimeterSize.value = coordinates.size
-                     altimeterPosition.value = coordinates.localToWindow(androidx.compose.ui.geometry.Offset.Zero)
+                     altimeterPosition.value = coordinates.localToWindow(Offset.Zero)
                  }
          ) {
             if (sensorData.overlayAlpha <= 0.5f && sensorData.calibrationState == CalibrationState.CALIBRATED) {
                 androidx.compose.material3.Button(onClick = onCaptureClick) {
-                    androidx.compose.material3.Text("CAPTURE")
+                    Text("CAPTURE")
                 }
                 Spacer(modifier = Modifier.height(8.dp))
             }
             Text(
-                text = "${String.format("%.1f", altimeterData.rawPressureHpa)} hPa",
+                text = "${"%.1f".format(altimeterData.rawPressureHpa)} hPa",
                 color = ComposeColor.Yellow,
                 style = MaterialTheme.typography.titleLarge
             )
@@ -367,9 +367,7 @@ fun OverlayView(
         // 6. PLANES Mode Overlay
          if (appMode == "PLANES") {
              PlanesOverlay(
-                 density = density,
                  altimeterSize = altimeterSize.value,
-                 altimeterPosition = altimeterPosition.value,
                  sensorData = sensorData,
                  onDistanceChange = onPlanesDistanceChange,
                  onVerboseToggle = onVerboseToggle,
@@ -381,9 +379,7 @@ fun OverlayView(
 
 @Composable
 fun PlanesOverlay(
-    density: androidx.compose.ui.unit.Density,
     altimeterSize: IntSize = IntSize.Zero,
-    altimeterPosition: androidx.compose.ui.geometry.Offset = androidx.compose.ui.geometry.Offset.Zero,
     sensorData: SensorData,
     onDistanceChange: (Float) -> Unit,
     onVerboseToggle: () -> Unit,
@@ -393,7 +389,6 @@ fun PlanesOverlay(
         modifier = Modifier.fillMaxSize()
     ) {
         if (altimeterSize != IntSize.Zero) {
-            with(density) {
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -497,40 +492,47 @@ fun PlanesOverlay(
                                 .padding(start = 150.dp, bottom = 10.dp) //do not change
                                 .width(80.dp),
                             horizontalAlignment = Alignment.Start,
-                            verticalArrangement = Arrangement.spacedBy(130.dp) //do not change
+                            verticalArrangement = Arrangement.spacedBy(120.dp) //do not change
                         ) {
                             // Verbose Toggle
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(verticalArrangement = Arrangement.spacedBy((-10).dp)) { //do not change
                                 Text(
-                                    "V", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall)
-                                Switch(
-                                    checked = sensorData.isVerbose,
-                                    onCheckedChange = { onVerboseToggle() },
-                                    modifier = Modifier.scale(0.9f), //DO NOT CHANGE
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = ComposeColor.Yellow,
-                                        uncheckedThumbColor = ComposeColor.Gray,
-                                        checkedTrackColor = ComposeColor.DarkGray,
-                                        uncheckedTrackColor = ComposeColor.Black
+                                    "Verbose", color = ComposeColor.White, style = MaterialTheme.typography.bodyMedium)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        " ", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall)
+                                    Switch(
+                                        checked = sensorData.isVerbose,
+                                        onCheckedChange = { onVerboseToggle() },
+                                        modifier = Modifier.scale(0.9f), //DO NOT CHANGE
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = ComposeColor.Yellow,
+                                            uncheckedThumbColor = ComposeColor.Gray,
+                                            checkedTrackColor = ComposeColor.DarkGray,
+                                            uncheckedTrackColor = ComposeColor.Black
+                                        )
                                     )
-                                )
+                                }
                             }
 
                             // Grounded Toggle
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    "G", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall)
-                                Switch(
-                                    checked = sensorData.showGrounded,
-                                    onCheckedChange = { onGroundedToggle() },
-                                    modifier = Modifier.scale(0.9f), //DO NOT CHANGE
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = ComposeColor.Green,
-                                        uncheckedThumbColor = ComposeColor.Gray,
-                                        checkedTrackColor = ComposeColor.DarkGray,
-                                        uncheckedTrackColor = ComposeColor.Black
+                            Column(verticalArrangement = Arrangement.spacedBy((-10).dp)) { //do not change
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        " ", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall)
+                                    Switch(
+                                        checked = sensorData.showGrounded,
+                                        onCheckedChange = { onGroundedToggle() },
+                                        modifier = Modifier.scale(0.9f), //DO NOT CHANGE
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = ComposeColor.Green,
+                                            uncheckedThumbColor = ComposeColor.Gray,
+                                            checkedTrackColor = ComposeColor.DarkGray,
+                                            uncheckedTrackColor = ComposeColor.Black
+                                        )
                                     )
-                                )
+                                }
+                                Text("Grounded", color = ComposeColor.White, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
 
@@ -600,7 +602,6 @@ fun PlanesOverlay(
                         }
                     }
                 }
-            }
         }
     }
 }
