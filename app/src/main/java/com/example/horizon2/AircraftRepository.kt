@@ -144,7 +144,9 @@ class AircraftRepository {
             val alt_baro: JsonElement? = null,
             val gs: Float? = null,
             val track: Float? = null,
-            val dist: Float? = null
+            val dist: Float? = null,
+            val nav_q_orig: String? = null,
+            val nav_q_dest: String? = null
         )
         
         @Serializable
@@ -172,7 +174,9 @@ class AircraftRepository {
                     distanceKm = dist.toFloat(),
                     bearingDegrees = bearing.toFloat(),
                     tailNumber = ac.r ?: "",
-                    aircraftType = ac.t ?: ""
+                    aircraftType = ac.t ?: "",
+                    origin = ac.nav_q_orig ?: "",
+                    destination = ac.nav_q_dest ?: ""
                 )
             } ?: emptyList()
         } catch (e: Exception) {
@@ -189,13 +193,15 @@ class AircraftRepository {
         data class AeAircraft(
             val flight: String? = null,
             val r: String? = null, 
-            val t: String? = null,
+            val t: String? = null, 
             val lat: Double? = null,
             val lon: Double? = null,
             val alt_baro: JsonElement? = null,
             val gs: Float? = null,
             val track: Float? = null,
-            val dist: Float? = null
+            val dist: Float? = null,
+            val nav_q_orig: String? = null,
+            val nav_q_dest: String? = null
         )
         
         @Serializable
@@ -223,7 +229,9 @@ class AircraftRepository {
                     distanceKm = dist.toFloat(),
                     bearingDegrees = bearing.toFloat(),
                     tailNumber = ac.r ?: "",
-                    aircraftType = ac.t ?: ""
+                    aircraftType = ac.t ?: "",
+                    origin = ac.nav_q_orig ?: "",
+                    destination = ac.nav_q_dest ?: ""
                 )
             } ?: emptyList()
         } catch (e: Exception) {

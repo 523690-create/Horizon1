@@ -47,18 +47,12 @@ android:viewportHeight="108">
     android:strokeColor="@color/white"
     android:strokeWidth="2"
     android:fillColor="@android:color/transparent"
-    android:pathData="
-            M72,52
-            L78.2,67.6
-            L94,67.6
-            L81,78.4
-            L86,94
-            L72,84
-            L58,94
-            L63,78.4
-            L50,67.6
-            L65.8,67.6
-            Z" />
+    android:pathData="M64,40
+                          L66.35,47.24
+                          L60.2,42.65
+                          L67.8,42.65
+                          L61.65,47.24
+                          Z" />
 </vector>
 
 

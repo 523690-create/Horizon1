@@ -374,8 +374,19 @@ fun PlanesOverlay(
                             Column(verticalArrangement = Arrangement.spacedBy((-15).dp)) { //do not change
                                 Text("Verbose", color = ComposeColor.White, style = MaterialTheme.typography.bodyLarge)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(" ", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall) //do not change
-                                    Switch(checked = sensorData.isVerbose, onCheckedChange = { onVerboseToggle() }, modifier = Modifier.scale(0.9f), colors = SwitchDefaults.colors(checkedThumbColor = ComposeColor.Yellow, uncheckedThumbColor = ComposeColor.Gray, checkedTrackColor = ComposeColor.DarkGray, uncheckedTrackColor = ComposeColor.Black))
+                                    Text(
+                                        " ", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall) //do not change
+                                    Switch(
+                                        checked = sensorData.isVerbose,
+                                        onCheckedChange = { onVerboseToggle() },
+                                        modifier = Modifier.scale(0.9f), //DO NOT CHANGE
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = ComposeColor.Yellow,
+                                            uncheckedThumbColor = ComposeColor.Gray,
+                                            checkedTrackColor = ComposeColor.DarkGray,
+                                            uncheckedTrackColor = ComposeColor.Black
+                                        )
+                                    )
                                 }
                             }
                             Column(verticalArrangement = Arrangement.spacedBy((-15).dp)) { //do not change

@@ -41,7 +41,9 @@ data class AircraftData(
     val tailNumber: String = "",
     val aircraftType: String = "",
     val origin: String = "",
-    val destination: String = ""
+    val destination: String = "",
+    val airlineName: String = "",
+    val aircraftTypeName: String = ""
 )
 
 data class CelestialObject(
@@ -165,22 +167,39 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     private fun startCelestialRefreshLoop() {
         viewModelScope.launch {
             while (true) {
+                val hasLocation = lastLat != 0.0 || lastLon != 0.0
                 refreshCelestialData()
-                delay(10 * 60 * 1000L) // 10 minutes
+                if (!hasLocation) {
+                    delay(5000L) // Retry every 5s if location is missing
+                } else {
+                    delay(10 * 60 * 1000L) // 10 minutes
+                }
             }
         }
     }
 
     private suspend fun refreshCelestialData() {
-        if (lastLat == 0.0 && lastLon == 0.0) return
+        if (lastLat == 0.0 && lastLon == 0.0) {
+            android.util.Log.w("SensorVM", "Skipping celestial refresh: No location")
+            return
+        }
 
+        android.util.Log.d("SensorVM", "Refreshing celestial data for $lastLat, $lastLon")
+        
         // 1. Fetch Planets from NASA JPL Horizons
-        val planets = horizonsRepository.fetchPlanetPositions(lastLat, lastLon)
+        val planets = try {
+            horizonsRepository.fetchPlanetPositions(lastLat, lastLon)
+        } catch (e: Exception) {
+            android.util.Log.e("SensorVM", "Planet fetch error: ${e.message}")
+            emptyList()
+        }
+        android.util.Log.d("SensorVM", "Fetched ${planets.size} planets")
 
         // 2. Load and Calculate Stars from R.array.star_data
         val stars = mutableListOf<CelestialObject>()
         try {
             val starArray = getApplication<Application>().resources.getStringArray(R.array.star_data)
+            android.util.Log.d("SensorVM", "Processing ${starArray.size} stars from resource")
             val jd = CelestialCalculator.getJulianDay(System.currentTimeMillis())
             
             starArray.forEach { entry ->
@@ -200,16 +219,17 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         } catch (e: Exception) {
             android.util.Log.e("SensorVM", "Error loading stars: ${e.message}")
         }
+        android.util.Log.d("SensorVM", "Calculated ${stars.size} visible stars")
 
         // 3. Add Sun and Moon (using internal calculator for efficiency)
         val jd = CelestialCalculator.getJulianDay(System.currentTimeMillis())
         val sun = CelestialCalculator.calculateSunPosition(lastLat, lastLon, jd)
         val moon = CelestialCalculator.calculateMoonPosition(lastLat, lastLon, jd)
 
-        val allCelestial = (planets + stars + sun + moon).sortedByDescending { it.magnitude }
+        val allCelestial = (planets + stars + sun + moon).sortedBy { it.magnitude }
         
         _uiState.value = _uiState.value.copy(celestialObjects = allCelestial)
-        android.util.Log.d("CelestialRefresh", "Refreshed ${allCelestial.size} celestial objects")
+        android.util.Log.d("CelestialRefresh", "Refreshed ${allCelestial.size} celestial objects (Sun alt: ${sun.altitude}, Moon alt: ${moon.altitude})")
     }
 
     private fun startAircraftRefreshLoop() {
@@ -254,8 +274,8 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             // Enrich data with full names
             val enrichedAircraft = aircraft.map { ac ->
                 ac.copy(
-                    callsign = aircraftRepository.getAirlineName(ac.callsign) ?: ac.callsign,
-                    aircraftType = aircraftRepository.getAircraftName(ac.aircraftType) ?: ac.aircraftType
+                    airlineName = aircraftRepository.getAirlineName(ac.callsign) ?: "",
+                    aircraftTypeName = aircraftRepository.getAircraftName(ac.aircraftType) ?: ""
                 )
             }
 
@@ -594,7 +614,11 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     }
 
     fun addLocationData(lat: Double, lon: Double) {
+        val wasZero = lastLat == 0.0 && lastLon == 0.0
         lastLat = lat; lastLon = lon
+        if (wasZero) {
+            viewModelScope.launch { refreshCelestialData() }
+        }
     }
 
     private fun normalizeMatrix(m: FloatArray) {
@@ -784,7 +808,7 @@ object CelestialCalculator {
         return objects.sortedBy { it.azimuth }
     }
 
-     fun raDecToAzAlt(ra: Double, dec: Double, lat: Double, lon: Double, jd: Double): Pair<Float, Float> {
+    fun raDecToAzAlt(ra: Double, dec: Double, lat: Double, lon: Double, jd: Double): Pair<Float, Float> {
         val lat_rad = Math.toRadians(lat)
         val dec_rad = Math.toRadians(dec)
 
@@ -799,7 +823,11 @@ object CelestialCalculator {
 
         val y = sin(ha_rad)
         val x = cos(ha_rad) * sin(lat_rad) - tan(dec_rad) * cos(lat_rad)
-        val azimuth = (Math.toDegrees(atan2(y, x)).toFloat() + 360) % 360
+        
+        // Atan2(y,x) gives azimuth measured Westward from South? 
+        // Let's use a more standard one for North=0, East=90
+        val az_west = (Math.toDegrees(atan2(y, x)).toFloat() + 360) % 360
+        val azimuth = (360 - az_west) % 360 // Convert to Eastward
 
         return Pair(azimuth, alt)
     }

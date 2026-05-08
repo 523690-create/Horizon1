@@ -99,15 +99,34 @@ class HorizonsRepository {
         val lines = dataBlock.lines()
         if (lines.isEmpty()) return null
         
-        // Typical line: 2026-05-06 14:00 *m  270.1234  15.456 ...
-        // Columns: Date/Time, solar-presence-flag, Azimuth, Elevation
+        // Robust parsing: Search for the line containing the date and then extract columns
+        // Columns usually: Date, Time, (Optional Flag), Azimuth, Elevation, ...
         val parts = lines[0].trim().split(Regex("\\s+"))
-        if (parts.size >= 4) {
-            val az = parts[2].toFloatOrNull()
-            val alt = parts[3].toFloatOrNull()
-            if (az != null && alt != null) {
-                return Pair(az, alt)
+        
+        // Find indices that are likely Azimuth and Elevation
+        // Usually parts[0] is Date, parts[1] is Time.
+        // If parts[2] is a flag (like * or C), then Azimuth is parts[3].
+        // If parts[2] is a number, then Azimuth is parts[2].
+        
+        var az: Float? = null
+        var alt: Float? = null
+        
+        for (i in 2 until parts.size) {
+            // Clean the part (remove non-numeric chars except . and - at start)
+            val cleanPart = parts[i].replace(Regex("[^0-9.-]"), "")
+            val value = cleanPart.toFloatOrNull()
+            if (value != null) {
+                if (az == null) {
+                    az = value
+                } else {
+                    alt = value
+                    break
+                }
             }
+        }
+        
+        if (az != null && alt != null) {
+            return Pair(az, alt)
         }
         return null
     }

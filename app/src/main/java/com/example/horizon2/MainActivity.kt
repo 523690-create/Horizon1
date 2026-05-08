@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
             var selectedMode by remember { mutableStateOf(AppMode.ALTIMETER) }
             var radioButtonsHeight by remember { mutableStateOf(0) }
 
+
             // Update display rotation
             val rotation = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 context.display.rotation
