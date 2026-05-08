@@ -46,6 +46,7 @@ fun OverlayView(
     onPlanesDistanceChange: (Float) -> Unit = {},
     onVerboseToggle: () -> Unit = {},
     onGroundedToggle: () -> Unit = {},
+    onConstellationToggle: () -> Unit = {},
     onRadarClick: () -> Unit = {},
     appMode: String = "ALTIMETER"
 ) {
@@ -262,6 +263,49 @@ fun OverlayView(
 
             // CELESTIAL HUD POPULATION
             if (appMode == "STARS") {
+                // 1. Draw Constellation Lines
+                if (sensorData.showConstellations) {
+                    sensorData.constellationLines.forEach { (s1, s2) ->
+                        val azDiff1 = (s1.azimuth - sensorData.trueHeading + 540) % 360 - 180
+                        val elDiff1 = s1.altitude - sensorData.truePitch
+                        val azDiff2 = (s2.azimuth - sensorData.trueHeading + 540) % 360 - 180
+                        val elDiff2 = s2.altitude - sensorData.truePitch
+
+                        rotate(degrees = sensorData.trueRoll, pivot = Offset(centerX, centerY)) {
+                            val x1 = centerX + (azDiff1 * hSensitivity)
+                            val y1 = centerY - (elDiff1 * vSensitivity)
+                            val x2 = centerX + (azDiff2 * hSensitivity)
+                            val y2 = centerY - (elDiff2 * vSensitivity)
+
+                            if ((x1 in 0f..width && y1 in 0f..height) || (x2 in 0f..width && y2 in 0f..height)) {
+                                drawLine(
+                                    color = ComposeColor.White,
+                                    start = Offset(x1, y1),
+                                    end = Offset(x2, y2),
+                                    strokeWidth = 1.dp.toPx(),
+                                    alpha = 0.4f
+                                )
+                            }
+                        }
+                    }
+
+                    // 2. Draw Constellation Names
+                    sensorData.constellationLabels.forEach { (name, pos) ->
+                        val azDiff = (pos.first - sensorData.trueHeading + 540) % 360 - 180
+                        val elDiff = pos.second - sensorData.truePitch
+
+                        rotate(degrees = sensorData.trueRoll, pivot = Offset(centerX, centerY)) {
+                            val screenX = centerX + (azDiff * hSensitivity)
+                            val screenY = centerY - (elDiff * vSensitivity)
+
+                            if (screenX in 0f..width && screenY in 0f..height) {
+                                drawContext.canvas.nativeCanvas.drawText(name.uppercase(), screenX, screenY, promptPaint)
+                            }
+                        }
+                    }
+                }
+
+                // 3. Draw Celestial Objects
                 sensorData.celestialObjects.forEach { obj ->
                     val azDiff = (obj.azimuth - sensorData.trueHeading + 540) % 360 - 180
                     val elDiff = obj.altitude - sensorData.truePitch
@@ -283,8 +327,15 @@ fun OverlayView(
                                 else -> max(1f, 3f - (obj.magnitude / 2f)).dp.toPx()
                             }
                             drawCircle(color = color, radius = radius, center = Offset(screenX, screenY))
+                            
+                            val label = if (sensorData.showConstellations && obj.type == "star" && obj.bayer.isNotEmpty()) {
+                                obj.bayer.split(" ").first() // extract Greek letter
+                            } else {
+                                obj.name
+                            }
+
                             val rowHeight = 12.dp.toPx()
-                            drawContext.canvas.nativeCanvas.drawText(obj.name, screenX, screenY + radius + rowHeight, textPaintWhite)
+                            drawContext.canvas.nativeCanvas.drawText(label, screenX, screenY + radius + rowHeight, textPaintWhite)
                         }
                     }
                 }
@@ -344,6 +395,51 @@ fun OverlayView(
                  onRadarClick = onRadarClick
              )
          }
+
+        // 7. STARS Mode Overlay (Toggles)
+        if (appMode == "STARS") {
+            StarsOverlay(
+                altimeterSize = altimeterSize.value,
+                sensorData = sensorData,
+                onConstellationToggle = onConstellationToggle
+            )
+        }
+    }
+}
+
+@Composable
+fun StarsOverlay(
+    altimeterSize: IntSize = IntSize.Zero,
+    sensorData: SensorData,
+    onConstellationToggle: () -> Unit
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (altimeterSize != IntSize.Zero) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 16.dp, bottom = 100.dp)
+                    .navigationBarsPadding()
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy((-10).dp)) {
+                    Text("Constellations", color = ComposeColor.White, style = MaterialTheme.typography.bodyMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(" ", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall)
+                        Switch(
+                            checked = sensorData.showConstellations,
+                            onCheckedChange = { onConstellationToggle() },
+                            modifier = Modifier.scale(0.9f),
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = ComposeColor.Yellow,
+                                uncheckedThumbColor = ComposeColor.Gray,
+                                checkedTrackColor = ComposeColor.DarkGray,
+                                uncheckedTrackColor = ComposeColor.Black
+                            )
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

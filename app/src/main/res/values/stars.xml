@@ -45,5 +45,13 @@
         <item>Polaris;α Ursae Minoris;1.97;37.954583;89.264167</item>
         <item>Alphard;α Hydrae;1.99;141.896667;-8.658611</item>
         <item>Hamal;α Arietis;2.01;31.793333;23.4625</item>
+        <!-- Additional Stars for Constellations -->
+        <item>Mintaka;δ Orionis;2.23;83.001667;-0.298889</item>
+        <item>Saiph;κ Orionis;2.06;86.939167;-9.669167</item>
+        <item>Merak;β Ursae Majoris;2.37;165.460417;56.3825</item>
+        <item>Phecda;γ Ursae Majoris;2.44;178.457917;53.694722</item>
+        <item>Megrez;δ Ursae Majoris;3.31;183.856667;57.032222</item>
+        <item>Mizar;ζ Ursae Majoris;2.23;200.081667;54.925278</item>
+        <item>Imai;δ Crucis;2.79;182.420417;-58.75</item>
     </string-array>
 </resources>

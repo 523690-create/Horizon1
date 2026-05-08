@@ -123,6 +123,7 @@ class MainActivity : ComponentActivity() {
                     onPlanesDistanceChange = { sensorViewModel.updatePlanesDistance(it) },
                     onVerboseToggle = { sensorViewModel.toggleVerbose() },
                     onGroundedToggle = { sensorViewModel.toggleGrounded() },
+                    onConstellationToggle = { sensorViewModel.toggleConstellations() },
                     onRadarClick = { sensorViewModel.triggerManualAircraftRefresh() },
                     appMode = selectedMode.name
                 )

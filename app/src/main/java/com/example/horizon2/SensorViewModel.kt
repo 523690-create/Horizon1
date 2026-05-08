@@ -53,7 +53,8 @@ data class CelestialObject(
     val azimuth: Float,      // 0-360 degrees, 0=North, 90=East
     val altitude: Float,      // -90 to 90 degrees, positive = above horizon
     val magnitude: Float = 0f, // for stars/planets
-    val type: String = "star" // "star", "planet", "sun", "moon"
+    val type: String = "star", // "star", "planet", "sun", "moon"
+    val bayer: String = ""    // Bayer designation (Greek letter + constellation)
 )
 
 @Immutable
@@ -92,7 +93,10 @@ data class SensorData(
     val lastAdbUpdateTime: String = "",
     val isVerbose: Boolean = false,
     val showGrounded: Boolean = true,
-    val celestialObjects: List<CelestialObject> = emptyList()
+    val showConstellations: Boolean = false,
+    val celestialObjects: List<CelestialObject> = emptyList(),
+    val constellationLines: List<Pair<CelestialObject, CelestialObject>> = emptyList(),
+    val constellationLabels: List<Pair<String, Pair<Float, Float>>> = emptyList() // Name to (AvgAz, AvgAlt)
 )
 
 class SensorViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
@@ -112,6 +116,33 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     // Active aircraft master list (ICAO24 -> AircraftData) for merging sources
     private val activeAircraft = mutableMapOf<String, AircraftData>()
 
+    // Constellation definitions (Bayer -> Bayer)
+    private val constellations = mapOf(
+        "Orion" to listOf(
+            "γ Orionis" to "α Orionis", "α Orionis" to "ζ Orionis", "ζ Orionis" to "ε Orionis",
+            "ε Orionis" to "δ Orionis", "δ Orionis" to "γ Orionis", "ζ Orionis" to "κ Orionis",
+            "κ Orionis" to "β Orionis", "β Orionis" to "δ Orionis"
+        ),
+        "Ursa Major" to listOf(
+            "α Ursae Majoris" to "β Ursae Majoris", "β Ursae Majoris" to "γ Ursae Majoris",
+            "γ Ursae Majoris" to "δ Ursae Majoris", "δ Ursae Majoris" to "α Ursae Majoris",
+            "δ Ursae Majoris" to "ε Ursae Majoris", "ε Ursae Majoris" to "ζ Ursae Majoris",
+            "ζ Ursae Majoris" to "η Ursae Majoris"
+        ),
+        "Crux" to listOf(
+            "γ Crucis" to "α Crucis", "β Crucis" to "δ Crucis"
+        ),
+        "Centaurus" to listOf(
+            "α Centauri" to "β Centauri"
+        ),
+        "Canis Major" to listOf(
+            "α Canis Majoris" to "ε Canis Majoris"
+        ),
+        "Geminorum" to listOf(
+            "α Geminorum" to "β Geminorum", "β Geminorum" to "γ Geminorum"
+        )
+    )
+
     // Current settings
     private var currentSensorDelay = prefs.getInt(KEY_SENSOR_DELAY, SensorManager.SENSOR_DELAY_UI)
     private var currentOverlayAlpha = prefs.getFloat(KEY_OVERLAY_ALPHA, 0.8f)
@@ -123,7 +154,8 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             planesDistanceValue = prefs.getFloat(KEY_PLANES_DIST_VAL, 0.5f),
             planesDistance = 10f.pow(prefs.getFloat(KEY_PLANES_DIST_VAL, 0.5f) * log10(99f)),
             isVerbose = prefs.getBoolean(KEY_IS_VERBOSE, false),
-            showGrounded = prefs.getBoolean(KEY_SHOW_GROUNDED, true)
+            showGrounded = prefs.getBoolean(KEY_SHOW_GROUNDED, true),
+            showConstellations = prefs.getBoolean(KEY_SHOW_CONSTELLATIONS, false)
         )
     )
     val uiState: StateFlow<SensorData> = _uiState.asStateFlow()
@@ -228,13 +260,14 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
                 val parts = entry.split(";")
                 if (parts.size >= 5) {
                     val name = parts[0]
+                    val bayer = parts[1]
                     val mag = parts[2].toFloatOrNull() ?: 2.0f
                     val ra = parts[3].toDoubleOrNull() ?: 0.0
                     val dec = parts[4].toDoubleOrNull() ?: 0.0
                     
                     val azAlt = CelestialCalculator.raDecToAzAlt(ra, dec, lastLat, lastLon, jd)
                     if (azAlt.second > -10.0f) {
-                        stars.add(CelestialObject(name, azAlt.first, azAlt.second, mag, "star"))
+                        stars.add(CelestialObject(name, azAlt.first, azAlt.second, mag, "star", bayer))
                     }
                 }
             }
@@ -250,8 +283,34 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
 
         val allCelestial = (planets + stars + sun + moon).sortedBy { it.magnitude }
         
-        _uiState.value = _uiState.value.copy(celestialObjects = allCelestial)
-        android.util.Log.d("CelestialRefresh", "Refreshed ${allCelestial.size} celestial objects (Sun alt: ${sun.altitude}, Moon alt: ${moon.altitude})")
+        // 4. Calculate Constellation Lines and Labels if enabled
+        val lines = mutableListOf<Pair<CelestialObject, CelestialObject>>()
+        val labels = mutableListOf<Pair<String, Pair<Float, Float>>>()
+        
+        constellations.forEach { (name, connections) ->
+            val constellationStars = mutableListOf<CelestialObject>()
+            connections.forEach { (b1, b2) ->
+                val s1 = stars.find { it.bayer == b1 }
+                val s2 = stars.find { it.bayer == b2 }
+                if (s1 != null && s2 != null) {
+                    lines.add(s1 to s2)
+                    if (!constellationStars.contains(s1)) constellationStars.add(s1)
+                    if (!constellationStars.contains(s2)) constellationStars.add(s2)
+                }
+            }
+            if (constellationStars.isNotEmpty()) {
+                val avgAz = constellationStars.map { it.azimuth }.average().toFloat()
+                val avgAlt = constellationStars.map { it.altitude }.average().toFloat()
+                labels.add(name to (avgAz to avgAlt))
+            }
+        }
+
+        _uiState.value = _uiState.value.copy(
+            celestialObjects = allCelestial,
+            constellationLines = lines,
+            constellationLabels = labels
+        )
+        android.util.Log.d("CelestialRefresh", "Refreshed ${allCelestial.size} celestial objects, ${lines.size} lines")
     }
 
     private fun startAircraftRefreshLoop() {
@@ -456,6 +515,12 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         val newState = !_uiState.value.showGrounded
         _uiState.value = _uiState.value.copy(showGrounded = newState)
         prefs.edit().putBoolean(KEY_SHOW_GROUNDED, newState).apply()
+    }
+
+    fun toggleConstellations() {
+        val newState = !_uiState.value.showConstellations
+        _uiState.value = _uiState.value.copy(showConstellations = newState)
+        prefs.edit().putBoolean(KEY_SHOW_CONSTELLATIONS, newState).apply()
     }
 
     fun triggerManualAircraftRefresh() {
@@ -783,6 +848,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         private const val KEY_PLANES_DIST_VAL = "planes_distance_value"
         private const val KEY_IS_VERBOSE = "is_verbose"
         private const val KEY_SHOW_GROUNDED = "show_grounded"
+        private const val KEY_SHOW_CONSTELLATIONS = "show_constellations"
         private const val KEY_SENSOR_DELAY = "sensor_delay"
         private const val KEY_OVERLAY_ALPHA = "overlay_alpha"
     }

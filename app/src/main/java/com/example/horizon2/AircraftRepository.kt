@@ -66,7 +66,12 @@ class AircraftRepository {
             "G550" to "Gulfstream G550", "G650" to "Gulfstream G650", "BCS3" to "Airbus A220-300",
             "CL30" to "Challenger 300", "CL35" to "Challenger 350", "CL60" to "Challenger 600",
             "GLEX" to "Global Express", "PC12" to "Pilatus PC-12", "PC24" to "Pilatus PC-24",
-            "C525" to "Cessna CitationJet", "C560" to "Cessna Citation V"
+            "C525" to "Cessna CitationJet", "C560" to "Cessna Citation V",
+            // Helicopters
+            "H135" to "Airbus H135", "H145" to "Airbus H145", "EC35" to "Eurocopter EC135",
+            "EC45" to "Eurocopter EC145", "AS50" to "Aérospatiale AS350", "B06" to "Bell 206 JetRanger",
+            "B407" to "Bell 407", "B429" to "Bell 429", "R44" to "Robinson R44", "R66" to "Robinson R66",
+            "A109" to "AgustaWestland AW109", "A139" to "AgustaWestland AW139", "S76" to "Sikorsky S-76"
         ))
     }
 
