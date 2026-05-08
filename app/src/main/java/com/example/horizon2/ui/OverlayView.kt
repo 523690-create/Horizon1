@@ -38,6 +38,7 @@ import kotlin.math.*
 
 @Composable
 fun OverlayView(
+    modifier: Modifier = Modifier,
     sensorData: SensorData,
     altimeterData: AltimeterData = AltimeterData(),
     onAltimeterClick: () -> Unit = {},
@@ -46,7 +47,7 @@ fun OverlayView(
     onVerboseToggle: () -> Unit = {},
     onGroundedToggle: () -> Unit = {},
     appMode: String = "ALTIMETER",
-    modifier: Modifier = Modifier,
+
 ) {
     val density = LocalDensity.current
     val altimeterSize = remember { mutableStateOf(IntSize.Zero) }
@@ -112,8 +113,11 @@ fun OverlayView(
             val centerX = width / 2
             val centerY = height / 2
             
-            val vFov = 60f 
-            val sensitivity = height / vFov
+            // Unified FOV and Sensitivity
+            val hFov = 60f 
+            val vFov = 45f 
+            val hSensitivity = width / hFov
+            val vSensitivity = height / vFov
 
             // 1. Dynamic opaque black overlay
             drawRect(color = ComposeColor.Black, alpha = sensorData.overlayAlpha, size = size)
@@ -122,8 +126,8 @@ fun OverlayView(
             val barThickness = width * 0.05f
             if (sensorData.isFlat) {
                 // Bubble Display for Flat orientation
-                val bubbleX = centerX + (sensorData.greenBubbleX * sensitivity)
-                val bubbleY = centerY + (sensorData.greenBubbleY * sensitivity)
+                val bubbleX = centerX + (sensorData.greenBubbleX * hSensitivity)
+                val bubbleY = centerY + (sensorData.greenBubbleY * vSensitivity)
                 // Unfilled Green Bubble
                 drawCircle(color = ComposeColor.Green, alpha = 0.5f, radius = 25.dp.toPx(), center = Offset(bubbleX, bubbleY), style = Stroke(width = 2.dp.toPx()))
                 
@@ -134,7 +138,7 @@ fun OverlayView(
             } else {
                 // Normal Line Display
                 rotate(degrees = sensorData.roll, pivot = Offset(centerX, centerY)) {
-                    val horizonY = centerY + (sensorData.pitch * sensitivity)
+                    val horizonY = centerY + (sensorData.pitch * vSensitivity)
                     
                     drawRect(color = ComposeColor.Green, alpha = 0.20f, topLeft = Offset(-width * 2, horizonY - (barThickness / 2)), size = androidx.compose.ui.geometry.Size(width * 5, barThickness))
                     drawRect(color = ComposeColor.Green, alpha = 0.20f, topLeft = Offset(centerX - (barThickness / 2), -height * 2), size = androidx.compose.ui.geometry.Size(barThickness, height * 5))
@@ -146,12 +150,12 @@ fun OverlayView(
             if (sensorData.hasBeenCalibrated) {
                 if (sensorData.isFlat) {
                     // White Bubble (Unfilled)
-                    val bubbleX = centerX + (sensorData.whiteBubbleX * sensitivity)
-                    val bubbleY = centerY + (sensorData.whiteBubbleY * sensitivity)
+                    val bubbleX = centerX + (sensorData.whiteBubbleX * hSensitivity)
+                    val bubbleY = centerY + (sensorData.whiteBubbleY * vSensitivity)
                     drawCircle(color = ComposeColor.White, alpha = 0.8f, radius = 20.dp.toPx(), center = Offset(bubbleX, bubbleY), style = Stroke(width = 3.dp.toPx()))
                 } else {
                     rotate(degrees = sensorData.trueRoll, pivot = Offset(centerX, centerY)) {
-                        val trueY = centerY + (sensorData.truePitch * sensitivity)
+                        val trueY = centerY + (sensorData.truePitch * vSensitivity)
                         
                         // Horizontal line
                         drawLine(color = ComposeColor.White, alpha = 0.90f, start = Offset(-width * 2, trueY), end = Offset(width * 5, trueY), strokeWidth = 2.dp.toPx())
@@ -159,13 +163,13 @@ fun OverlayView(
                         // Horizontal Ticks (every 10 degrees)
                         for (angle in 0 until 360 step 10) {
                             val delta = (angle - sensorData.trueHeading + 540) % 360 - 180
-                            val tickX = centerX + (delta * sensitivity)
+                            val tickX = centerX + (delta * hSensitivity)
                             if (tickX in -width..width * 2) {
                                 drawLine(color = ComposeColor.White, alpha = 0.90f, start = Offset(tickX, trueY - 10.dp.toPx()), end = Offset(tickX, trueY + 10.dp.toPx()), strokeWidth = 2.dp.toPx())
                                 
                                 if (sensorData.isGpsCalibrated || sensorData.isManualCalibrated) {
                                     rotate(degrees = -sensorData.trueRoll, pivot = Offset(tickX, trueY - 15.dp.toPx())) {
-                                        drawContext.canvas.nativeCanvas.drawText("$angle", tickX, trueY - 15.dp.toPx(), promptPaint)
+                                        drawContext.canvas.nativeCanvas.drawText(angle.toString(), tickX, trueY - 15.dp.toPx(), promptPaint)
                                     }
                                 }
                             }
@@ -177,7 +181,7 @@ fun OverlayView(
                         // Vertical Ticks (every 15 degrees)
                         for (pitch in -180..180 step 15) {
                             val delta = pitch - sensorData.trueFullPitch
-                            val tickY = centerY - (delta * sensitivity)
+                            val tickY = centerY - (delta * vSensitivity)
                             if (tickY in -height..height * 2) {
                                 drawLine(color = ComposeColor.White, alpha = 0.90f, start = Offset(centerX - 10.dp.toPx(), tickY), end = Offset(centerX + 10.dp.toPx(), tickY), strokeWidth = 2.dp.toPx())
                                 
@@ -201,11 +205,6 @@ fun OverlayView(
 
             // AIRCRAFT HUD POPULATION
             if (appMode == "PLANES") {
-                val hFov = 60f 
-                val vFov = 45f 
-                val hSensitivity = width / hFov
-                val vSensitivity = height / vFov
-
                 sensorData.nearbyAircraft.forEach { aircraft ->
                     // 1. Filtering
                     val isTooSlow = !sensorData.showGrounded && aircraft.speedKts < 20
@@ -214,13 +213,7 @@ fun OverlayView(
                     if (isTooSlow || isOutOfRange) return@forEach
 
                     // 2. Calculate Azimuth relative to User Heading
-                    val currentHeading = if (sensorData.isGpsCalibrated || sensorData.isManualCalibrated) {
-                        sensorData.trueHeading
-                    } else {
-                        sensorData.heading
-                    }
-                    
-                    val azDiff = (aircraft.bearingDegrees - currentHeading + 540) % 360 - 180
+                    val azDiff = (aircraft.bearingDegrees - sensorData.trueHeading + 540) % 360 - 180
                     
                     // 3. Calculate Elevation relative to Horizon
                     val altDiffM = aircraft.altitudeM - 0f 
@@ -283,21 +276,26 @@ fun OverlayView(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
             }
+
+             Text(
+                    text = altimeterData.status,
+             color = ComposeColor.Gray,
+             style = MaterialTheme.typography.labelSmall
+             )
+
+             Text(
+                    text = "${altimeterData.correctedAltitudeM} m",
+             color = ComposeColor.White,
+             style = MaterialTheme.typography.titleMedium
+             )
+
             Text(
                 text = "${"%.1f".format(altimeterData.rawPressureHpa)} hPa",
-                color = ComposeColor.Yellow,
-                style = MaterialTheme.typography.titleLarge
+                color = ComposeColor.White,//do not change
+                style = MaterialTheme.typography.titleMedium //do not change
             )
-            Text(
-                text = "${altimeterData.correctedAltitudeM} m",
-                color = ComposeColor.White,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-                text = altimeterData.status,
-                color = ComposeColor.Gray,
-                style = MaterialTheme.typography.labelSmall
-            )
+
+
             
             // Consolidated Heading Block
             Spacer(modifier = Modifier.height(4.dp))
@@ -439,13 +437,7 @@ fun PlanesOverlay(
                                 }
 
                                 // 45-degree green wedge pointing to bearing
-                                val currentHeading = if (sensorData.isGpsCalibrated || sensorData.isManualCalibrated) {
-                                    sensorData.trueHeading
-                                } else {
-                                    sensorData.heading
-                                }
-                                
-                                val startAngle = currentHeading - 90f - 22.5f
+                                val startAngle = sensorData.trueHeading - 90f - 22.5f
                                 drawArc(
                                     color = ComposeColor(0, 100, 0),
                                     startAngle = startAngle,
@@ -489,9 +481,9 @@ fun PlanesOverlay(
                         Column(
                             modifier = Modifier
                                 .align(Alignment.BottomStart)//do not change
-                                .padding(start = 150.dp, bottom = 10.dp) //do not change
+                                .padding(start = 140.dp, bottom = 10.dp) //do not change
                                 .width(80.dp),
-                            horizontalAlignment = Alignment.Start,
+                            horizontalAlignment = Alignment.End,
                             verticalArrangement = Arrangement.spacedBy(120.dp) //do not change
                         ) {
                             // Verbose Toggle
@@ -516,7 +508,7 @@ fun PlanesOverlay(
                             }
 
                             // Grounded Toggle
-                            Column(verticalArrangement = Arrangement.spacedBy((-10).dp)) { //do not change
+                            Column(verticalArrangement = Arrangement.spacedBy((-15).dp)) { //do not change
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         " ", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall)
@@ -532,7 +524,7 @@ fun PlanesOverlay(
                                         )
                                     )
                                 }
-                                Text("Grounded", color = ComposeColor.White, style = MaterialTheme.typography.bodyMedium)
+                                Text("Ground", color = ComposeColor.White, style = MaterialTheme.typography.bodyMedium)//do not change
                             }
                         }
 

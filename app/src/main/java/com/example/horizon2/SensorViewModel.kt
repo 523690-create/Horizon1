@@ -98,6 +98,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     private val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
     private val gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
     private val aircraftRepository = AircraftRepository()
+    private val horizonsRepository = HorizonsRepository()
 
     // Current settings
     private var currentSensorDelay = SensorManager.SENSOR_DELAY_UI
@@ -148,6 +149,57 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         }
         
         startAircraftRefreshLoop()
+        startCelestialRefreshLoop()
+    }
+
+    private fun startCelestialRefreshLoop() {
+        viewModelScope.launch {
+            while (true) {
+                refreshCelestialData()
+                delay(10 * 60 * 1000L) // 10 minutes
+            }
+        }
+    }
+
+    private suspend fun refreshCelestialData() {
+        if (lastLat == 0.0 && lastLon == 0.0) return
+
+        // 1. Fetch Planets from NASA JPL Horizons
+        val planets = horizonsRepository.fetchPlanetPositions(lastLat, lastLon)
+
+        // 2. Load and Calculate Stars from R.array.star_data
+        val stars = mutableListOf<CelestialObject>()
+        try {
+            val starArray = getApplication<Application>().resources.getStringArray(R.array.star_data)
+            val jd = CelestialCalculator.getJulianDay(System.currentTimeMillis())
+            
+            starArray.forEach { entry ->
+                val parts = entry.split(";")
+                if (parts.size >= 5) {
+                    val name = parts[0]
+                    val mag = parts[2].toFloatOrNull() ?: 2.0f
+                    val ra = parts[3].toDoubleOrNull() ?: 0.0
+                    val dec = parts[4].toDoubleOrNull() ?: 0.0
+                    
+                    val azAlt = CelestialCalculator.raDecToAzAlt(ra, dec, lastLat, lastLon, jd)
+                    if (azAlt.second > -10.0f) {
+                        stars.add(CelestialObject(name, azAlt.first, azAlt.second, mag, "star"))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SensorVM", "Error loading stars: ${e.message}")
+        }
+
+        // 3. Add Sun and Moon (using internal calculator for efficiency)
+        val jd = CelestialCalculator.getJulianDay(System.currentTimeMillis())
+        val sun = CelestialCalculator.calculateSunPosition(lastLat, lastLon, jd)
+        val moon = CelestialCalculator.calculateMoonPosition(lastLat, lastLon, jd)
+
+        val allCelestial = (planets + stars + sun + moon).sortedByDescending { it.magnitude }
+        
+        _uiState.value = _uiState.value.copy(celestialObjects = allCelestial)
+        android.util.Log.d("CelestialRefresh", "Refreshed ${allCelestial.size} celestial objects")
     }
 
     private fun startAircraftRefreshLoop() {
@@ -487,7 +539,11 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             val azDiff = (gyroOrientation.azimuth - filteredTrueAzimuth + 540) % 360 - 180
             filteredTrueAzimuth = (filteredTrueAzimuth + alpha * azDiff + 360) % 360
 
-            val currentTrueHeading = bestOffset?.let { (filteredTrueAzimuth + it + 360) % 360 }
+            val currentTrueHeading = if (bestOffset != null) {
+                (filteredTrueAzimuth + bestOffset + 360) % 360
+            } else {
+                filteredTrueAzimuth
+            }
 
             // Bubble offsets: Projected World Z onto Device XY
             val gBX = Math.toDegrees(asin(fusedMatrix[6].toDouble())).toFloat()
@@ -499,8 +555,8 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             _uiState.value = _uiState.value.copy(
                 pitch = fusedOrientation.pitch, roll = fusedOrientation.roll, heading = fusedOrientation.azimuth, headingString = getHeadingString(fusedOrientation.azimuth),
                 truePitch = filteredTruePitch, trueRoll = filteredTrueRoll, trueFullPitch = filteredTrueFullPitch,
-                trueHeading = currentTrueHeading ?: 0f,
-                trueHeadingString = currentTrueHeading?.let { getHeadingString(it) } ?: "N",
+                trueHeading = currentTrueHeading,
+                trueHeadingString = getHeadingString(currentTrueHeading),
                 gpsHeading = currentGpsHeading,
                 gpsHeadingString = currentGpsHeading?.let { getHeadingString(it) },
                 manualHeading = currentManualHeading,
@@ -695,7 +751,7 @@ object CelestialCalculator {
         return objects.sortedBy { it.azimuth }
     }
 
-    private fun raDecToAzAlt(ra: Double, dec: Double, lat: Double, lon: Double, jd: Double): Pair<Float, Float> {
+     fun raDecToAzAlt(ra: Double, dec: Double, lat: Double, lon: Double, jd: Double): Pair<Float, Float> {
         val lat_rad = Math.toRadians(lat)
         val dec_rad = Math.toRadians(dec)
 
@@ -715,7 +771,7 @@ object CelestialCalculator {
         return Pair(azimuth, alt)
     }
 
-    private fun calculateSunPosition(lat: Double, lon: Double, jd: Double): CelestialObject {
+  fun calculateSunPosition(lat: Double, lon: Double, jd: Double): CelestialObject {
         // Simplified Sun position calculation
         val n = jd - 2451545.0  // Days since J2000
         val L = (280.46646 + 0.8697 * n) % 360
@@ -731,7 +787,7 @@ object CelestialCalculator {
         return CelestialObject("Sun", az, alt, -26.7f, "sun")
     }
 
-    private fun calculateMoonPosition(lat: Double, lon: Double, jd: Double): CelestialObject {
+     fun calculateMoonPosition(lat: Double, lon: Double, jd: Double): CelestialObject {
         // Simplified Moon position calculation
         val n = jd - 2451545.0
         val l = (218.3165 + 13.17639 * n) % 360
@@ -752,7 +808,7 @@ object CelestialCalculator {
         return CelestialObject("Moon", az, alt, -12.6f, "moon")
     }
 
-    private fun getJulianDay(timeMs: Long): Double {
+     fun getJulianDay(timeMs: Long): Double {
         val calendar = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
         calendar.timeInMillis = timeMs
 
