@@ -177,7 +177,7 @@ fun OverlayView(
                         // Vertical Ticks (every 15 degrees)
                         for (pitch in -180..180 step 15) {
                             val delta = pitch - sensorData.trueFullPitch
-                            val tickY = centerY + (delta * sensitivity)
+                            val tickY = centerY - (delta * sensitivity)
                             if (tickY in -height..height * 2) {
                                 drawLine(color = ComposeColor.White, alpha = 0.90f, start = Offset(centerX - 10.dp.toPx(), tickY), end = Offset(centerX + 10.dp.toPx(), tickY), strokeWidth = 2.dp.toPx())
                                 
@@ -493,19 +493,20 @@ fun PlanesOverlay(
                         // Control Toggles (Moved left to avoid slider interference)
                         Column(
                             modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(start = 100.dp, bottom = 10.dp)
+                                .align(Alignment.BottomStart)//do not change
+                                .padding(start = 150.dp, bottom = 10.dp) //do not change
                                 .width(80.dp),
                             horizontalAlignment = Alignment.Start,
-                            verticalArrangement = Arrangement.spacedBy(0.dp)
+                            verticalArrangement = Arrangement.spacedBy(130.dp) //do not change
                         ) {
                             // Verbose Toggle
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("V", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall)
+                                Text(
+                                    "V", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall)
                                 Switch(
                                     checked = sensorData.isVerbose,
                                     onCheckedChange = { onVerboseToggle() },
-                                    modifier = Modifier.scale(0.45f),
+                                    modifier = Modifier.scale(0.9f), //DO NOT CHANGE
                                     colors = SwitchDefaults.colors(
                                         checkedThumbColor = ComposeColor.Yellow,
                                         uncheckedThumbColor = ComposeColor.Gray,
@@ -517,11 +518,12 @@ fun PlanesOverlay(
 
                             // Grounded Toggle
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("G", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall)
+                                Text(
+                                    "G", color = ComposeColor.White, style = MaterialTheme.typography.labelSmall)
                                 Switch(
                                     checked = sensorData.showGrounded,
                                     onCheckedChange = { onGroundedToggle() },
-                                    modifier = Modifier.scale(0.45f),
+                                    modifier = Modifier.scale(0.9f), //DO NOT CHANGE
                                     colors = SwitchDefaults.colors(
                                         checkedThumbColor = ComposeColor.Green,
                                         uncheckedThumbColor = ComposeColor.Gray,

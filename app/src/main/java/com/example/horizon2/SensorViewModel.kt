@@ -376,9 +376,9 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             avgX /= accelHistory.size; avgY /= accelHistory.size; avgZ /= accelHistory.size
             avgMag /= accelHistory.size
 
-            // Scalar check: 1G (9.81 m/s^2) +/- 0.1G (0.98 m/s^2)
+            // Scalar check: 1G (9.81 m/s^2) +/- 0.1G (0.981 m/s^2)
             val g = 9.81f
-            val gThreshold = 0.098f //manual edit
+            val gThreshold = 0.981f
             if (abs(avgMag - g) > gThreshold) {
                 accelHistory.clear()
                 return
@@ -405,10 +405,38 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             }
 
             // If all checks pass, "snap" the orientation (level the horizon)
-            // DECUPLE COMPASS: We ONLY update gyroOnlyMatrix from fusedMatrix
-            // We DO NOT modify manualNorthOffset or gpsNorthOffset here.
-
-             gyroOnlyMatrix = fusedMatrix.clone()
+            // YAW-INVARIANT CALIBRATION: 
+            // 1. Extract absolute "Up" from fusedMatrix (accelerometer-based)
+            // 2. Extract current "North" estimate from gyroOnlyMatrix
+            // 3. Reconstruct coordinate system to align with Up but preserve North heading
+            
+            val up = floatArrayOf(fusedMatrix[6], fusedMatrix[7], fusedMatrix[8])
+            val currentNorth = floatArrayOf(gyroOnlyMatrix[3], gyroOnlyMatrix[4], gyroOnlyMatrix[5])
+            
+            // East = North x Up
+            val eastX = currentNorth[1] * up[2] - currentNorth[2] * up[1]
+            val eastY = currentNorth[2] * up[0] - currentNorth[0] * up[2]
+            val eastZ = currentNorth[0] * up[1] - currentNorth[1] * up[0]
+            
+            val eastMag = sqrt(eastX*eastX + eastY*eastY + eastZ*eastZ)
+            if (eastMag > 0.001f) {
+                val eX = eastX / eastMag; val eY = eastY / eastMag; val eZ = eastZ / eastMag
+                
+                // New North = Up x East
+                val nX = up[1] * eZ - up[2] * eY
+                val nY = up[2] * eX - up[0] * eZ
+                val nZ = up[0] * eY - up[1] * eX
+                
+                // Update gyroOnlyMatrix with new East, North, and Up
+                gyroOnlyMatrix[0] = eX; gyroOnlyMatrix[1] = eY; gyroOnlyMatrix[2] = eZ
+                gyroOnlyMatrix[3] = nX; gyroOnlyMatrix[4] = nY; gyroOnlyMatrix[5] = nZ
+                gyroOnlyMatrix[6] = up[0]; gyroOnlyMatrix[7] = up[1]; gyroOnlyMatrix[8] = up[2]
+                
+                normalizeMatrix(gyroOnlyMatrix)
+            } else {
+                // Edge case: North and Up are parallel. Fall back to simple clone if reconstruction fails.
+                gyroOnlyMatrix = fusedMatrix.clone()
+            }
 
             lastCalibrationTime = currentTime
             _uiState.value = _uiState.value.copy(
@@ -416,7 +444,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
                 hasBeenCalibrated = true
             )
             accelHistory.clear()
-            android.util.Log.d("AutoCalibrate", "Orientation snapped at scalar ${avgMag}m/s^2")
+            android.util.Log.d("AutoCalibrate", "Yaw-invariant orientation snapped at scalar ${avgMag}m/s^2")
         }
     }
 
