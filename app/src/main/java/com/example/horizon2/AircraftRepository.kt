@@ -141,13 +141,12 @@ class AircraftRepository {
         try {
             val aircraft = client.get("https://raw.githubusercontent.com/opentraveldata/opentraveldata/master/opentraveldata/optd_aircraft.csv").bodyAsText()
             aircraft.lineSequence().forEach { line ->
-                // Format: ICAO^Name^Category
+                // Format: iata_type^icao_type^name^category
                 val parts = line.split("^")
-                if (parts.size >= 2) {
-                    val icao = parts[0].trim()
-                    val name = parts[1].trim()
-                    if (icao.isNotEmpty() && name.isNotEmpty()) {
-                        // Only add if not already present to avoid overwriting better names
+                if (parts.size >= 3) {
+                    val icao = parts[1].trim()
+                    val name = parts[2].trim()
+                    if (icao.isNotEmpty() && name.isNotEmpty() && icao != "icao_type") {
                         if (!aircraftMap.containsKey(icao)) {
                             aircraftMap[icao] = name
                         }
@@ -358,6 +357,15 @@ class AircraftRepository {
             android.util.Log.e("AircraftRepo", "ADS-B Exchange Error: ${e.message}")
             emptyList()
         }
+    }
+
+    suspend fun fetchRoute(icao24: String): String? {
+        if (icao24.isEmpty()) return null
+        val url = "https://api.adsb.fi/api/v2/route/$icao24"
+        return try {
+            val response: JsonObject = client.get(url).body()
+            response["route"]?.jsonPrimitive?.content?.ifEmpty { null }
+        } catch (e: Exception) { null }
     }
 
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

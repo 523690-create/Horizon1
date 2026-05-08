@@ -327,14 +327,31 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
                 val finalOrig = ac.origin.ifEmpty { meta?.orig ?: "" }
                 val finalDest = ac.destination.ifEmpty { meta?.dest ?: "" }
 
+                val finalTypeExpanded = aircraftRepository.getAircraftName(finalType) ?: ""
+                
                 ac.copy(
                     tailNumber = finalTail,
                     aircraftType = finalType,
                     origin = finalOrig,
                     destination = finalDest,
                     airlineName = aircraftRepository.getAirlineName(ac.callsign) ?: "",
-                    aircraftTypeName = aircraftRepository.getAircraftName(finalType) ?: ""
+                    aircraftTypeName = finalTypeExpanded
                 )
+            }
+
+            // 3. ASYNC ROUTE SUPPLEMENT: Try to fill in missing routes for displayed planes
+            viewModelScope.launch {
+                enrichedAircraft.forEach { ac ->
+                    if (ac.origin.isEmpty() && ac.icao24.isNotEmpty()) {
+                        val routeStr = aircraftRepository.fetchRoute(ac.icao24)
+                        if (routeStr != null) {
+                            val parts = routeStr.split("-")
+                            if (parts.size >= 2) {
+                                metadataCache[ac.icao24] = AircraftMetadata(ac.tailNumber, ac.aircraftType, parts[0].trim(), parts[1].trim())
+                            }
+                        }
+                    }
+                }
             }
 
             _uiState.value = _uiState.value.copy(
