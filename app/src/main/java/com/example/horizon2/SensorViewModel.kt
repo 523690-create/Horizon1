@@ -44,7 +44,8 @@ data class AircraftData(
     val destination: String = "",
     val airlineName: String = "",
     val aircraftTypeName: String = "",
-    val icao24: String = ""
+    val icao24: String = "",
+    val lastSeen: Long = System.currentTimeMillis()
 )
 
 data class CelestialObject(
@@ -107,6 +108,9 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     // Metadata Cache for cross-referencing sources (ICAO24 -> Metadata)
     private data class AircraftMetadata(val r: String, val t: String, val orig: String, val dest: String)
     private val metadataCache = mutableMapOf<String, AircraftMetadata>()
+    
+    // Active aircraft master list (ICAO24 -> AircraftData) for merging sources
+    private val activeAircraft = mutableMapOf<String, AircraftData>()
 
     // Current settings
     private var currentSensorDelay = prefs.getInt(KEY_SENSOR_DELAY, SensorManager.SENSOR_DELAY_UI)
@@ -163,6 +167,19 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         viewModelScope.launch {
             aircraftRepository.checkConnectivity()
             aircraftRepository.fetchEnrichmentData()
+            // Re-enrich existing data once maps are loaded
+            if (activeAircraft.isNotEmpty()) {
+                val now = System.currentTimeMillis()
+                activeAircraft.keys.toList().forEach { key ->
+                    activeAircraft[key]?.let { ac ->
+                        activeAircraft[key] = ac.copy(
+                            airlineName = aircraftRepository.getAirlineName(ac.callsign) ?: "",
+                            aircraftTypeName = aircraftRepository.getAircraftName(ac.aircraftType) ?: ""
+                        )
+                    }
+                }
+                updateUiAircraftList(_uiState.value.lastAdbSource, _uiState.value.lastAdbUpdateTime)
+            }
         }
         
         startAircraftRefreshLoop()
@@ -239,132 +256,101 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
 
     private fun startAircraftRefreshLoop() {
         viewModelScope.launch {
-            val sources = listOf("OpenSky", "ADS-B Exchange", "Airplanes.Live")
+            val sources = listOf("Airplanes.Live", "ADS-B Exchange", "OpenSky")
             var sourceIndex = 0
             
             while (true) {
-                val success = refreshAircraftData(sources[sourceIndex])
-                if (success) {
-                    sourceIndex = (sourceIndex + 1) % sources.size
-                    delay(5 * 60 * 1000L) // 5 minutes (standard interval)
-                } else {
-                    // Try next source immediately on failure
-                    sourceIndex = (sourceIndex + 1) % sources.size
-                    delay(1000L) // Small delay to prevent tight loop
-                }
+                refreshAircraftData(sources[sourceIndex])
+                sourceIndex = (sourceIndex + 1) % sources.size
+                // Rotate every 1 minute for a more complete merged list
+                delay(60 * 1000L) 
             }
         }
     }
 
-    private suspend fun refreshAircraftData(source: String): Boolean {
-        // Always fetch at 100km radius to keep data available for all ranges
+    private suspend fun refreshAircraftData(source: String) {
         val fetchRadius = 100f
-        
-        // Ensure we have a valid location before fetching
-        if (lastLat == 0.0 && lastLon == 0.0) {
-            android.util.Log.w("AircraftRefresh", "Skipping fetch: Location not yet available")
-            return false
-        }
+        if (lastLat == 0.0 && lastLon == 0.0) return
 
-        val aircraft = when (source) {
+        val rawList = when (source) {
             "OpenSky" -> aircraftRepository.fetchOpenSky(lastLat, lastLon, fetchRadius)
             "Airplanes.Live" -> aircraftRepository.fetchAirplanesLive(lastLat, lastLon, fetchRadius)
             "ADS-B Exchange" -> aircraftRepository.fetchAdsbExchange(lastLat, lastLon, fetchRadius)
             else -> emptyList()
         }
         
-        // CROSS-REFERENCE & CACHE: Update metadata cache from ANY source that provides it
-        aircraft.forEach { ac ->
+        val currentTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+        val now = System.currentTimeMillis()
+
+        // 1. DEDUPLICATE incoming data and update metadata cache
+        // Normalize key to avoid duplicates (strip spaces from callsign)
+        val deduplicated = rawList.distinctBy { it.icao24.ifEmpty { it.callsign.replace(" ", "") } }
+        deduplicated.forEach { ac ->
             if (ac.icao24.isNotEmpty()) {
                 val existing = metadataCache[ac.icao24]
-                val newR = ac.tailNumber.ifEmpty { existing?.r ?: "" }
-                val newT = ac.aircraftType.ifEmpty { existing?.t ?: "" }
-                val newO = ac.origin.ifEmpty { existing?.orig ?: "" }
-                val newD = ac.destination.ifEmpty { existing?.dest ?: "" }
-                metadataCache[ac.icao24] = AircraftMetadata(newR, newT, newO, newD)
-            }
-        }
-
-        // If source is OpenSky and we have few registrations, supplement with a metadata-heavy source
-        if (source == "OpenSky" && aircraft.isNotEmpty()) {
-            try {
-                val supplement = aircraftRepository.fetchAirplanesLive(lastLat, lastLon, fetchRadius)
-                supplement.forEach { ac ->
-                    if (ac.icao24.isNotEmpty()) {
-                        val existing = metadataCache[ac.icao24]
-                        val newR = ac.tailNumber.ifEmpty { existing?.r ?: "" }
-                        val newT = ac.aircraftType.ifEmpty { existing?.t ?: "" }
-                        val newO = ac.origin.ifEmpty { existing?.orig ?: "" }
-                        val newD = ac.destination.ifEmpty { existing?.dest ?: "" }
-                        metadataCache[ac.icao24] = AircraftMetadata(newR, newT, newO, newD)
-                    }
-                }
-            } catch (e: Exception) { android.util.Log.e("AircraftRefresh", "Metadata supplement failed: ${e.message}") }
-        }
-        
-        val currentTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
-        
-        if (aircraft.isNotEmpty()) {
-            // 1. Update/Use Metadata Cache for cross-referencing
-            aircraft.forEach { ac ->
-                if (ac.icao24.isNotEmpty()) {
-                    val existing = metadataCache[ac.icao24]
-                    val newR = ac.tailNumber.ifEmpty { existing?.r ?: "" }
-                    val newT = ac.aircraftType.ifEmpty { existing?.t ?: "" }
-                    val newO = ac.origin.ifEmpty { existing?.orig ?: "" }
-                    val newD = ac.destination.ifEmpty { existing?.dest ?: "" }
-                    metadataCache[ac.icao24] = AircraftMetadata(newR, newT, newO, newD)
-                    if (newO.isNotEmpty()) android.util.Log.v("MetadataCache", "Cached O/D for ${ac.icao24}: $newO -> $newD")
-                }
-            }
-
-            // 2. Enrich data with full names and cached metadata
-            val enrichedAircraft = aircraft.map { ac ->
-                val meta = if (ac.icao24.isNotEmpty()) metadataCache[ac.icao24] else null
-                
-                val finalTail = ac.tailNumber.ifEmpty { meta?.r ?: "" }
-                val finalType = ac.aircraftType.ifEmpty { meta?.t ?: "" }
-                val finalOrig = ac.origin.ifEmpty { meta?.orig ?: "" }
-                val finalDest = ac.destination.ifEmpty { meta?.dest ?: "" }
-
-                val finalTypeExpanded = aircraftRepository.getAircraftName(finalType) ?: ""
-                
-                ac.copy(
-                    tailNumber = finalTail,
-                    aircraftType = finalType,
-                    origin = finalOrig,
-                    destination = finalDest,
-                    airlineName = aircraftRepository.getAirlineName(ac.callsign) ?: "",
-                    aircraftTypeName = finalTypeExpanded
+                metadataCache[ac.icao24] = AircraftMetadata(
+                    ac.tailNumber.ifEmpty { existing?.r ?: "" },
+                    ac.aircraftType.ifEmpty { existing?.t ?: "" },
+                    ac.origin.ifEmpty { existing?.orig ?: "" },
+                    ac.destination.ifEmpty { existing?.dest ?: "" }
                 )
             }
+        }
 
-            // 3. ASYNC ROUTE SUPPLEMENT: Try to fill in missing routes for displayed planes
-            viewModelScope.launch {
-                enrichedAircraft.forEach { ac ->
-                    if (ac.origin.isEmpty() && ac.icao24.isNotEmpty()) {
-                        val routeStr = aircraftRepository.fetchRoute(ac.icao24)
-                        if (routeStr != null) {
-                            val parts = routeStr.split("-")
-                            if (parts.size >= 2) {
-                                metadataCache[ac.icao24] = AircraftMetadata(ac.tailNumber, ac.aircraftType, parts[0].trim(), parts[1].trim())
+        // 2. MERGE into active aircraft map
+        deduplicated.forEach { ac ->
+            val key = ac.icao24.ifEmpty { ac.callsign.replace(" ", "") }
+            val meta = metadataCache[ac.icao24]
+            
+            val enriched = ac.copy(
+                tailNumber = ac.tailNumber.ifEmpty { meta?.r ?: "" },
+                aircraftType = ac.aircraftType.ifEmpty { meta?.t ?: "" },
+                origin = ac.origin.ifEmpty { meta?.orig ?: "" },
+                destination = ac.destination.ifEmpty { meta?.dest ?: "" },
+                airlineName = aircraftRepository.getAirlineName(ac.callsign) ?: "",
+                aircraftTypeName = aircraftRepository.getAircraftName(ac.aircraftType.ifEmpty { meta?.t ?: "" }) ?: "",
+                lastSeen = now
+            )
+            activeAircraft[key] = enriched
+
+            // 3. ASYNC ROUTE SUPPLEMENT for displayable aircraft missing routes
+            if (enriched.origin.isEmpty() && enriched.icao24.isNotEmpty()) {
+                viewModelScope.launch {
+                    val routeStr = aircraftRepository.fetchRoute(enriched.icao24)
+                    if (routeStr != null) {
+                        val parts = routeStr.split("-")
+                        if (parts.size >= 2) {
+                            val o = parts[0].trim()
+                            val d = parts[1].trim()
+                            // Update cache
+                            val m = metadataCache[enriched.icao24]
+                            metadataCache[enriched.icao24] = AircraftMetadata(m?.r ?: "", m?.t ?: "", o, d)
+                            // Update active map and UI immediately
+                            val current = activeAircraft[enriched.icao24]
+                            if (current != null) {
+                                val updated = current.copy(origin = o, destination = d)
+                                activeAircraft[enriched.icao24] = updated
+                                updateUiAircraftList(source, currentTime)
                             }
                         }
                     }
                 }
             }
-
-            _uiState.value = _uiState.value.copy(
-                lastAdbSource = source,
-                nearbyAircraft = enrichedAircraft,
-                lastAdbUpdateTime = currentTime
-            )
-            android.util.Log.d("AircraftRefresh", "Fetched ${aircraft.size} planes from $source at $lastLat, $lastLon (fixed 100km fetch) at $currentTime")
-            return true
-        } else {
-            android.util.Log.w("AircraftRefresh", "No planes from $source, will try next source")
-            return false
         }
+
+        // 4. CLEANUP: Remove aircraft not seen for > 10 minutes
+        val expirationTime = 10 * 60 * 1000L
+        activeAircraft.entries.removeIf { now - it.value.lastSeen > expirationTime }
+
+        updateUiAircraftList(source, currentTime)
+    }
+
+    private fun updateUiAircraftList(source: String, time: String) {
+        _uiState.value = _uiState.value.copy(
+            lastAdbSource = source,
+            nearbyAircraft = activeAircraft.values.toList().sortedBy { it.distanceKm },
+            lastAdbUpdateTime = time
+        )
     }
 
     fun startOrientationCalibration() {
