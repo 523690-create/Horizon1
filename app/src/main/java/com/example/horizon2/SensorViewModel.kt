@@ -99,12 +99,22 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     private val gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
     private val aircraftRepository = AircraftRepository()
     private val horizonsRepository = HorizonsRepository()
+    private val prefs = application.getSharedPreferences("horizon2_prefs", Context.MODE_PRIVATE)
 
     // Current settings
-    private var currentSensorDelay = SensorManager.SENSOR_DELAY_UI
-    private var currentOverlayAlpha = 0.8f
+    private var currentSensorDelay = prefs.getInt(KEY_SENSOR_DELAY, SensorManager.SENSOR_DELAY_UI)
+    private var currentOverlayAlpha = prefs.getFloat(KEY_OVERLAY_ALPHA, 0.8f)
 
-    private val _uiState = MutableStateFlow(SensorData(sensorDelay = currentSensorDelay, overlayAlpha = currentOverlayAlpha))
+    private val _uiState = MutableStateFlow(
+        SensorData(
+            sensorDelay = currentSensorDelay, 
+            overlayAlpha = currentOverlayAlpha,
+            planesDistanceValue = prefs.getFloat(KEY_PLANES_DIST_VAL, 0.5f),
+            planesDistance = 10f.pow(prefs.getFloat(KEY_PLANES_DIST_VAL, 0.5f) * log10(99f)),
+            isVerbose = prefs.getBoolean(KEY_IS_VERBOSE, false),
+            showGrounded = prefs.getBoolean(KEY_SHOW_GROUNDED, true)
+        )
+    )
     val uiState: StateFlow<SensorData> = _uiState.asStateFlow()
 
     private var gravity: FloatArray? = null
@@ -335,11 +345,13 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         sensorManager.registerListener(this, magnetometer, delay)
         sensorManager.registerListener(this, gyroscope, delay)
         _uiState.value = _uiState.value.copy(sensorDelay = delay)
+        prefs.edit().putInt(KEY_SENSOR_DELAY, delay).apply()
     }
 
     fun updateOverlayAlpha(alpha: Float) {
         currentOverlayAlpha = alpha
         _uiState.value = _uiState.value.copy(overlayAlpha = alpha)
+        prefs.edit().putFloat(KEY_OVERLAY_ALPHA, alpha).apply()
     }
 
     fun updatePlanesDistance(value: Float) {
@@ -350,14 +362,27 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             planesDistanceValue = value,
             planesDistance = distance
         )
+        prefs.edit().putFloat(KEY_PLANES_DIST_VAL, value).apply()
     }
 
     fun toggleVerbose() {
-        _uiState.value = _uiState.value.copy(isVerbose = !_uiState.value.isVerbose)
+        val newState = !_uiState.value.isVerbose
+        _uiState.value = _uiState.value.copy(isVerbose = newState)
+        prefs.edit().putBoolean(KEY_IS_VERBOSE, newState).apply()
     }
 
     fun toggleGrounded() {
-        _uiState.value = _uiState.value.copy(showGrounded = !_uiState.value.showGrounded)
+        val newState = !_uiState.value.showGrounded
+        _uiState.value = _uiState.value.copy(showGrounded = newState)
+        prefs.edit().putBoolean(KEY_SHOW_GROUNDED, newState).apply()
+    }
+
+    fun triggerManualAircraftRefresh() {
+        viewModelScope.launch {
+            val currentSource = _uiState.value.lastAdbSource
+            val sourceToUse = if (currentSource == "None" || currentSource.isEmpty()) "OpenSky" else currentSource
+            refreshAircraftData(sourceToUse)
+        }
     }
 
     fun pauseSensors() {
@@ -430,7 +455,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
 
             // Scalar check: 1G (9.81 m/s^2) +/- 0.1G (0.981 m/s^2)
             val g = 9.81f
-            val gThreshold = 0.981f
+            val gThreshold = 0.0981f //do not change
             if (abs(avgMag - g) > gThreshold) {
                 accelHistory.clear()
                 return
@@ -438,7 +463,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
 
             // Vector check: +/- 2.5 degrees stability
             // Angular difference between each sample and the average must be < 2.5 deg
-            val stabilityThresholdDeg = 2.5f
+            val stabilityThresholdDeg = 1.5f //do not change
             val cosThreshold = cos(Math.toRadians(stabilityThresholdDeg.toDouble())).toFloat()
             
             val avgNorm = sqrt(avgX*avgX + avgY*avgY + avgZ*avgZ)
@@ -668,6 +693,14 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
     override fun onCleared() { super.onCleared(); sensorManager.unregisterListener(this) }
+
+    companion object {
+        private const val KEY_PLANES_DIST_VAL = "planes_distance_value"
+        private const val KEY_IS_VERBOSE = "is_verbose"
+        private const val KEY_SHOW_GROUNDED = "show_grounded"
+        private const val KEY_SENSOR_DELAY = "sensor_delay"
+        private const val KEY_OVERLAY_ALPHA = "overlay_alpha"
+    }
 }
 
 // Celestial calculation utilities

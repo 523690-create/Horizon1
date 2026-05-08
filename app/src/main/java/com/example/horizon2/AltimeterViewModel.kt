@@ -169,7 +169,7 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
             if (fetchedAirports.isNotEmpty()) {
                 updateAltimeterWithAirports(fetchedAirports)
                 val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-                _uiState.value = _uiState.value.copy(status = "METAR Updated at $time")
+                _uiState.value = _uiState.value.copy(status = "$time METAR upd") //do not change
             } else {
                 _uiState.value = _uiState.value.copy(status = "No data for targets")
             }

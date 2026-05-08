@@ -122,6 +122,7 @@ class MainActivity : ComponentActivity() {
                     onPlanesDistanceChange = { sensorViewModel.updatePlanesDistance(it) },
                     onVerboseToggle = { sensorViewModel.toggleVerbose() },
                     onGroundedToggle = { sensorViewModel.toggleGrounded() },
+                    onRadarClick = { sensorViewModel.triggerManualAircraftRefresh() },
                     appMode = selectedMode.name
                 )
 
