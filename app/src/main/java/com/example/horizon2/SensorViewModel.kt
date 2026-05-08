@@ -43,7 +43,8 @@ data class AircraftData(
     val origin: String = "",
     val destination: String = "",
     val airlineName: String = "",
-    val aircraftTypeName: String = ""
+    val aircraftTypeName: String = "",
+    val icao24: String = ""
 )
 
 data class CelestialObject(
@@ -102,6 +103,10 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     private val aircraftRepository = AircraftRepository()
     private val horizonsRepository = HorizonsRepository()
     private val prefs = application.getSharedPreferences("horizon2_prefs", Context.MODE_PRIVATE)
+
+    // Metadata Cache for cross-referencing sources (ICAO24 -> Metadata)
+    private data class AircraftMetadata(val r: String, val t: String, val orig: String, val dest: String)
+    private val metadataCache = mutableMapOf<String, AircraftMetadata>()
 
     // Current settings
     private var currentSensorDelay = prefs.getInt(KEY_SENSOR_DELAY, SensorManager.SENSOR_DELAY_UI)
@@ -268,14 +273,67 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             else -> emptyList()
         }
         
+        // CROSS-REFERENCE & CACHE: Update metadata cache from ANY source that provides it
+        aircraft.forEach { ac ->
+            if (ac.icao24.isNotEmpty()) {
+                val existing = metadataCache[ac.icao24]
+                val newR = ac.tailNumber.ifEmpty { existing?.r ?: "" }
+                val newT = ac.aircraftType.ifEmpty { existing?.t ?: "" }
+                val newO = ac.origin.ifEmpty { existing?.orig ?: "" }
+                val newD = ac.destination.ifEmpty { existing?.dest ?: "" }
+                metadataCache[ac.icao24] = AircraftMetadata(newR, newT, newO, newD)
+            }
+        }
+
+        // If source is OpenSky and we have few registrations, supplement with a metadata-heavy source
+        if (source == "OpenSky" && aircraft.isNotEmpty()) {
+            try {
+                val supplement = aircraftRepository.fetchAirplanesLive(lastLat, lastLon, fetchRadius)
+                supplement.forEach { ac ->
+                    if (ac.icao24.isNotEmpty()) {
+                        val existing = metadataCache[ac.icao24]
+                        val newR = ac.tailNumber.ifEmpty { existing?.r ?: "" }
+                        val newT = ac.aircraftType.ifEmpty { existing?.t ?: "" }
+                        val newO = ac.origin.ifEmpty { existing?.orig ?: "" }
+                        val newD = ac.destination.ifEmpty { existing?.dest ?: "" }
+                        metadataCache[ac.icao24] = AircraftMetadata(newR, newT, newO, newD)
+                    }
+                }
+            } catch (e: Exception) { android.util.Log.e("AircraftRefresh", "Metadata supplement failed: ${e.message}") }
+        }
+        
         val currentTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
         
         if (aircraft.isNotEmpty()) {
-            // Enrich data with full names
+            // 1. Update/Use Metadata Cache for cross-referencing
+            aircraft.forEach { ac ->
+                if (ac.icao24.isNotEmpty()) {
+                    val existing = metadataCache[ac.icao24]
+                    val newR = ac.tailNumber.ifEmpty { existing?.r ?: "" }
+                    val newT = ac.aircraftType.ifEmpty { existing?.t ?: "" }
+                    val newO = ac.origin.ifEmpty { existing?.orig ?: "" }
+                    val newD = ac.destination.ifEmpty { existing?.dest ?: "" }
+                    metadataCache[ac.icao24] = AircraftMetadata(newR, newT, newO, newD)
+                    if (newO.isNotEmpty()) android.util.Log.v("MetadataCache", "Cached O/D for ${ac.icao24}: $newO -> $newD")
+                }
+            }
+
+            // 2. Enrich data with full names and cached metadata
             val enrichedAircraft = aircraft.map { ac ->
+                val meta = if (ac.icao24.isNotEmpty()) metadataCache[ac.icao24] else null
+                
+                val finalTail = ac.tailNumber.ifEmpty { meta?.r ?: "" }
+                val finalType = ac.aircraftType.ifEmpty { meta?.t ?: "" }
+                val finalOrig = ac.origin.ifEmpty { meta?.orig ?: "" }
+                val finalDest = ac.destination.ifEmpty { meta?.dest ?: "" }
+
                 ac.copy(
+                    tailNumber = finalTail,
+                    aircraftType = finalType,
+                    origin = finalOrig,
+                    destination = finalDest,
                     airlineName = aircraftRepository.getAirlineName(ac.callsign) ?: "",
-                    aircraftTypeName = aircraftRepository.getAircraftName(ac.aircraftType) ?: ""
+                    aircraftTypeName = aircraftRepository.getAircraftName(finalType) ?: ""
                 )
             }
 

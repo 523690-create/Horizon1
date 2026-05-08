@@ -228,13 +228,33 @@ fun OverlayView(
 
                         if (screenX in 0f..width && screenY in 0f..height) {
                             drawCircle(color = ComposeColor.Yellow, radius = 3.dp.toPx(), center = Offset(screenX, screenY))
-                            val flightInfo = if (sensorData.isVerbose) "${expandAirline(aircraft.callsign)} ${aircraft.tailNumber}" else "${aircraft.callsign} ${aircraft.tailNumber}"
-                            val typeInfo = if (sensorData.isVerbose) "${expandType(aircraft.aircraftType)} - ${aircraft.distanceKm.toInt()}km" else "${aircraft.aircraftType} - ${aircraft.distanceKm.toInt()}km"
-                            val metrics = "${aircraft.speedKts.toInt()}kts ${aircraft.heading.toInt()}° ${aircraft.altitudeM.toInt()}m"
+                            
                             val rowHeight = 12.dp.toPx()
-                            drawContext.canvas.nativeCanvas.drawText(flightInfo, screenX, screenY + rowHeight, textPaintYellow)
-                            drawContext.canvas.nativeCanvas.drawText(typeInfo, screenX, screenY + rowHeight * 2, textPaintWhite)
-                            drawContext.canvas.nativeCanvas.drawText(metrics, screenX, screenY + rowHeight * 3, textPaintWhite)
+                            
+                            // Row 1: flight number, type abbreviation, speed
+                            val row1 = "${aircraft.callsign} ${aircraft.aircraftType} ${aircraft.speedKts.toInt()}kts"
+                            // Row 2: altitude, heading, distance
+                            val row2 = "${aircraft.altitudeM.toInt()}m ${aircraft.heading.toInt()}° ${aircraft.distanceKm.toInt()}km"
+                            
+                            drawContext.canvas.nativeCanvas.drawText(row1, screenX, screenY + rowHeight, textPaintYellow)
+                            drawContext.canvas.nativeCanvas.drawText(row2, screenX, screenY + rowHeight * 2, textPaintWhite)
+
+                            if (sensorData.isVerbose) {
+                                // Row 3: airline (expanded)
+                                val row3 = aircraft.airlineName.ifEmpty { expandAirline(aircraft.callsign) }
+                                // Row 4: aircraft type (expanded)
+                                val row4 = aircraft.aircraftTypeName.ifEmpty { expandType(aircraft.aircraftType) }
+                                // Row 5: origin to destination
+                                val row5 = if (aircraft.origin.isNotEmpty() || aircraft.destination.isNotEmpty()) {
+                                    "${aircraft.origin.ifEmpty { "?" }} to ${aircraft.destination.ifEmpty { "?" }}"
+                                } else ""
+
+                                drawContext.canvas.nativeCanvas.drawText(row3, screenX, screenY + rowHeight * 3, textPaintWhite)
+                                drawContext.canvas.nativeCanvas.drawText(row4, screenX, screenY + rowHeight * 4, textPaintWhite)
+                                if (row5.isNotEmpty()) {
+                                    drawContext.canvas.nativeCanvas.drawText(row5, screenX, screenY + rowHeight * 5, textPaintWhite)
+                                }
+                            }
                         }
                     }
                 }
@@ -415,18 +435,64 @@ fun PlanesOverlay(
 }
 
 private fun expandAirline(callsign: String): String {
-    val upper = callsign.uppercase()
-    return when {
-        upper.startsWith("UAL") -> "United"
-        upper.startsWith("AAL") -> "American"
-        upper.startsWith("DAL") -> "Delta"
-        upper.startsWith("SWA") -> "Southwest"
-        upper.startsWith("JBU") -> "JetBlue"
-        upper.startsWith("BAW") -> "British"
-        upper.startsWith("DLH") -> "Lufthansa"
-        upper.startsWith("AFR") -> "Air France"
-        upper.startsWith("UPS") -> "UPS"
-        upper.startsWith("FDX") -> "FedEx"
+    if (callsign.length < 3) return callsign
+    val icao = callsign.substring(0, 3).uppercase()
+    return when (icao) {
+        "AAL" -> "American Airlines"
+        "BAW" -> "British Airways"
+        "DAL" -> "Delta Air Lines"
+        "DLH" -> "Lufthansa"
+        "FDX" -> "FedEx"
+        "JBU" -> "JetBlue Airways"
+        "KLM" -> "KLM Royal Dutch"
+        "SWA" -> "Southwest Airlines"
+        "UAL" -> "United Airlines"
+        "UPS" -> "United Parcel Service"
+        "AFR" -> "Air France"
+        "RYR" -> "Ryanair"
+        "EZY" -> "easyJet"
+        "WZZ" -> "Wizz Air"
+        "THY" -> "Turkish Airlines"
+        "SIA" -> "Singapore Airlines"
+        "QFA" -> "Qantas"
+        "UAE" -> "Emirates"
+        "ETD" -> "Etihad Airways"
+        "ACA" -> "Air Canada"
+        "ASA" -> "Alaska Airlines"
+        "NKS" -> "Spirit Airlines"
+        "FFT" -> "Frontier Airlines"
+        "SKW" -> "SkyWest Airlines"
+        "ENY" -> "Envoy Air"
+        "PDT" -> "Piedmont Airlines"
+        "EDV" -> "Endeavor Air"
+        "ASH" -> "Mesa Airlines"
+        "GJS" -> "GoJet Airlines"
+        "RPA" -> "Republic Airways"
+        "CPZ" -> "Compass Airlines"
+        "QXE" -> "Horizon Air"
+        "SWR" -> "Swiss International"
+        "IBE" -> "Iberia"
+        "VOO" -> "Volaris"
+        "AMX" -> "Aeroméxico"
+        "AZA" -> "Alitalia"
+        "ANA" -> "All Nippon Airways"
+        "CAL" -> "China Airlines"
+        "CSA" -> "Czech Airlines"
+        "EAL" -> "Eastern Air Lines"
+        "FIN" -> "Finnair"
+        "HAL" -> "Hawaiian Airlines"
+        "JAL" -> "Japan Airlines"
+        "KAL" -> "Korean Air"
+        "LAN" -> "LATAM Airlines"
+        "MAS" -> "Malaysia Airlines"
+        "PAL" -> "Philippine Airlines"
+        "QTR" -> "Qatar Airways"
+        "SAS" -> "Scandinavian Airlines"
+        "TAP" -> "TAP Air Portugal"
+        "THY" -> "Turkish Airlines"
+        "VIR" -> "Virgin Atlantic"
+        "VLG" -> "Vueling"
+        "WJA" -> "WestJet"
         else -> callsign
     }
 }
@@ -434,21 +500,89 @@ private fun expandAirline(callsign: String): String {
 private fun expandType(type: String): String {
     val upper = type.uppercase()
     return when (upper) {
-        "B738" -> "Boeing 737-800"
-        "B737" -> "Boeing 737"
-        "B739" -> "Boeing 737-900"
+        "A318" -> "Airbus A318"
+        "A319" -> "Airbus A319"
         "A320" -> "Airbus A320"
         "A321" -> "Airbus A321"
-        "A319" -> "Airbus A319"
+        "A332" -> "Airbus A330-200"
+        "A333" -> "Airbus A330-300"
+        "A343" -> "Airbus A340-300"
+        "A346" -> "Airbus A340-600"
+        "A359" -> "Airbus A350-900"
+        "A35K" -> "Airbus A350-1000"
+        "A388" -> "Airbus A380-800"
+        "B737" -> "Boeing 737"
+        "B738" -> "Boeing 737-800"
+        "B739" -> "Boeing 737-900"
+        "B38M" -> "Boeing 737 MAX 8"
+        "B39M" -> "Boeing 737 MAX 9"
+        "B744" -> "Boeing 747-400"
+        "B748" -> "Boeing 747-8"
+        "B752" -> "Boeing 757-200"
+        "B753" -> "Boeing 757-300"
+        "B762" -> "Boeing 762"
+        "B763" -> "Boeing 763"
+        "B764" -> "Boeing 764"
         "B772" -> "Boeing 777-200"
         "B77W" -> "Boeing 777-300ER"
         "B788" -> "Boeing 787-8"
         "B789" -> "Boeing 787-9"
-        "A359" -> "Airbus A350-900"
+        "B78X" -> "Boeing 787-10"
+        "CRJ1" -> "Bombardier CRJ-100"
+        "CRJ2" -> "Bombardier CRJ-200"
         "CRJ7" -> "Bombardier CRJ-700"
         "CRJ9" -> "Bombardier CRJ-900"
+        "CRJX" -> "Bombardier CRJ-1000"
+        "E135" -> "Embraer ERJ-135"
+        "E145" -> "Embraer ERJ-145"
+        "E170" -> "Embraer 170"
         "E175" -> "Embraer 175"
         "E190" -> "Embraer 190"
+        "E195" -> "Embraer 195"
+        "E290" -> "Embraer E190-E2"
+        "E295" -> "Embraer E195-E2"
+        "GLF4" -> "Gulfstream IV"
+        "GLF5" -> "Gulfstream V"
+        "GLF6" -> "Gulfstream VI"
+        "GL5T" -> "Gulfstream G500"
+        "G550" -> "Gulfstream G550"
+        "G650" -> "Gulfstream G650"
+        "BCS1" -> "Airbus A220-100"
+        "BCS3" -> "Airbus A220-300"
+        "DH8D" -> "Dash 8 Q400"
+        "AT72" -> "ATR 72"
+        "AT75" -> "ATR 72-500"
+        "AT76" -> "ATR 72-600"
+        "MD80" -> "McDonnell Douglas MD-80"
+        "MD82" -> "McDonnell Douglas MD-82"
+        "MD83" -> "McDonnell Douglas MD-83"
+        "MD88" -> "McDonnell Douglas MD-88"
+        "MD90" -> "McDonnell Douglas MD-90"
+        "F900" -> "Falcon 900"
+        "FA7X" -> "Falcon 7X"
+        "FA8X" -> "Falcon 8X"
+        "C510" -> "Cessna Citation Mustang"
+        "C525" -> "Cessna CitationJet"
+        "C550" -> "Cessna Citation II"
+        "C560" -> "Cessna Citation V"
+        "C680" -> "Cessna Citation Sovereign"
+        "C750" -> "Cessna Citation X"
+        "C172" -> "Cessna 172 Skyhawk"
+        "C182" -> "Cessna 182 Skylane"
+        "C208" -> "Cessna 208 Caravan"
+        "SR20" -> "Cirrus SR20"
+        "SR22" -> "Cirrus SR22"
+        "SF50" -> "Cirrus Vision SF50"
+        "PC12" -> "Pilatus PC-12"
+        "PC24" -> "Pilatus PC-24"
+        "CL30" -> "Challenger 300"
+        "CL35" -> "Challenger 350"
+        "CL60" -> "Challenger 600"
+        "CL64" -> "Challenger 604"
+        "CL65" -> "Challenger 605"
+        "GLEX" -> "Global Express"
+        "GL6T" -> "Global 6000"
+        "GL7T" -> "Global 7500"
         else -> type
     }
 }
