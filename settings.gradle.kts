@@ -22,6 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Horizon1"
+rootProject.name = "Horizon3"
 include(":app")
  

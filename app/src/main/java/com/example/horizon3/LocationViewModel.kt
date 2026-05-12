@@ -1,4 +1,4 @@
-package com.example.horizon2
+package com.example.horizon3
 
 import android.annotation.SuppressLint
 import android.app.Application

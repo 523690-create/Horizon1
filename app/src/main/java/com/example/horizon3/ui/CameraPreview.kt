@@ -1,4 +1,4 @@
-package com.example.horizon2.ui
+package com.example.horizon3.ui
 
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview

@@ -161,11 +161,11 @@
 7130 7116 0:190 / /data/data rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,seclabel,mode=751
 7131 7116 0:191 / /data/user rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,seclabel,mode=751
 7132 7116 0:192 / /data/user_de rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,seclabel,mode=751
-7133 7132 254:6 /user_de/0/com.example.horizon1 /data/user_de/0/com.example.horizon1 rw,nosuid,nodev,noatime master:30 - ext4 /dev/block/dm-6 rw,seclabel,resgid=1065,errors=panic
-7134 7130 254:6 /data/com.example.horizon1 /data/data/com.example.horizon1 rw,nosuid,nodev,noatime master:30 - ext4 /dev/block/dm-6 rw,seclabel,resgid=1065,errors=panic
+7133 7132 254:6 /user_de/0/com.example.Horizon3 /data/user_de/0/com.example.Horizon3 rw,nosuid,nodev,noatime master:30 - ext4 /dev/block/dm-6 rw,seclabel,resgid=1065,errors=panic
+7134 7130 254:6 /data/com.example.Horizon3 /data/data/com.example.Horizon3 rw,nosuid,nodev,noatime master:30 - ext4 /dev/block/dm-6 rw,seclabel,resgid=1065,errors=panic
 7135 7132 254:6 /user_de/0/com.google.android.gms /data/user_de/0/com.google.android.gms rw,nosuid,nodev,noatime master:30 - ext4 /dev/block/dm-6 rw,seclabel,resgid=1065,errors=panic
 7136 7130 254:6 /data/com.google.android.gms /data/data/com.google.android.gms rw,nosuid,nodev,noatime master:30 - ext4 /dev/block/dm-6 rw,seclabel,resgid=1065,errors=panic
 7137 7116 0:193 / /data/misc/profiles/cur rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,seclabel,mode=751
 7138 7116 0:194 / /data/misc/profiles/ref rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw,seclabel,mode=751
-7139 7137 254:6 /misc/profiles/cur/0/com.example.horizon1 /data/misc/profiles/cur/0/com.example.horizon1 rw,nosuid,nodev,noatime master:30 - ext4 /dev/block/dm-6 rw,seclabel,resgid=1065,errors=panic
-7140 7138 254:6 /misc/profiles/ref/com.example.horizon1 /data/misc/profiles/ref/com.example.horizon1 rw,nosuid,nodev,noatime master:30 - ext4 /dev/block/dm-6 rw,seclabel,resgid=1065,errors=panic
+7139 7137 254:6 /misc/profiles/cur/0/com.example.Horizon3 /data/misc/profiles/cur/0/com.example.Horizon3 rw,nosuid,nodev,noatime master:30 - ext4 /dev/block/dm-6 rw,seclabel,resgid=1065,errors=panic
+7140 7138 254:6 /misc/profiles/ref/com.example.Horizon3 /data/misc/profiles/ref/com.example.Horizon3 rw,nosuid,nodev,noatime master:30 - ext4 /dev/block/dm-6 rw,seclabel,resgid=1065,errors=panic

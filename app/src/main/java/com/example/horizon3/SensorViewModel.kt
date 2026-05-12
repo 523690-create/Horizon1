@@ -1,4 +1,4 @@
-package com.example.horizon2
+package com.example.horizon3
 
 import android.app.Application
 import android.content.Context
@@ -107,7 +107,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     private val gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
     private val aircraftRepository = AircraftRepository()
     private val horizonsRepository = HorizonsRepository()
-    private val prefs = application.getSharedPreferences("horizon2_prefs", Context.MODE_PRIVATE)
+    private val prefs = application.getSharedPreferences("Horizon3_prefs", Context.MODE_PRIVATE)
 
     // Metadata Cache for cross-referencing sources (ICAO24 -> Metadata)
     private data class AircraftMetadata(val r: String, val t: String, val orig: String, val dest: String)

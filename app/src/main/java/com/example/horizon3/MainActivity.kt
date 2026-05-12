@@ -1,4 +1,4 @@
-package com.example.horizon2
+package com.example.horizon3
 
 import android.Manifest
 import android.os.Bundle
@@ -32,8 +32,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.horizon2.ui.CameraPreview
-import com.example.horizon2.ui.OverlayView
+import com.example.horizon3.ui.CameraPreview
+import com.example.horizon3.ui.OverlayView
 import androidx.compose.ui.graphics.Color
 
 class MainActivity : ComponentActivity() {

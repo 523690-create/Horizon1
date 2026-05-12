@@ -1,4 +1,4 @@
-package com.example.horizon2.ui
+package com.example.horizon3.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,9 +26,9 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.runtime.mutableStateOf
-import com.example.horizon2.CalibrationState
-import com.example.horizon2.SensorData
-import com.example.horizon2.AltimeterData
+import com.example.horizon3.CalibrationState
+import com.example.horizon3.SensorData
+import com.example.horizon3.AltimeterData
 import android.graphics.Paint
 import android.graphics.Typeface
 import java.util.Locale
