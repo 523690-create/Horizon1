@@ -71,6 +71,7 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
     private var currentPressure = 1013.25f
     private var lastLocation: Pair<Double, Double>? = null
     private var lastPressureUpdateTime = 0L
+    private var isAltimeterMode = true
 
     private val client = HttpClient(Android) {
         install(ContentNegotiation) {
@@ -92,11 +93,24 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun setAppMode(mode: String) {
+        isAltimeterMode = mode == "ALTIMETER"
+        if (!isAltimeterMode) {
+            _uiState.value = _uiState.value.copy(
+                status = "Standby",
+                correctedAltitudeM = 0,
+                rawPressureHpa = 0f
+            )
+        }
+    }
+
     private fun startAirportUpdateLoop() {
         viewModelScope.launch {
             while (true) {
-                lastLocation?.let { (lat, lon) ->
-                    if (AirportDb.isLoaded) fetchMetarData(lat, lon)
+                if (isAltimeterMode) {
+                    lastLocation?.let { (lat, lon) ->
+                        if (AirportDb.isLoaded) fetchMetarData(lat, lon)
+                    }
                 }
                 delay(300000L) // 5 minutes
             }
@@ -215,6 +229,7 @@ class AltimeterViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     override fun onSensorChanged(event: SensorEvent) {
+        if (!isAltimeterMode) return
         if (event.sensor.type == Sensor.TYPE_PRESSURE) {
             val now = System.currentTimeMillis()
             if (now - lastPressureUpdateTime >= 10000L) {

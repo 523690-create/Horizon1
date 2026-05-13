@@ -57,6 +57,13 @@ data class CelestialObject(
     val bayer: String = ""    // Bayer designation (Greek letter + constellation)
 )
 
+data class FovCalibrationPoint(
+    val xPercent: Float,
+    val yPercent: Float,
+    val label: String,
+    val capturedAzimuth: Float? = null
+)
+
 @Immutable
 data class SensorData(
     val pitch: Float = 0f,
@@ -68,6 +75,8 @@ data class SensorData(
     val trueFullPitch: Float = 0f,
     val trueHeading: Float = 0f,
     val trueHeadingString: String = "N",
+    val gpsSpeed: Float = 0f,
+    val gpsCourse: Float = 0f,
     val gpsHeading: Float? = null,
     val gpsHeadingString: String? = null,
     val manualHeading: Float? = null,
@@ -86,6 +95,12 @@ data class SensorData(
     val sensorDelay: Int = SensorManager.SENSOR_DELAY_UI,
     val overlayAlpha: Float = 0.8f,
     val lastMetarStatus: String = "",
+    val hFov: Float = 60f,
+    val fovCalibrationPoints: List<FovCalibrationPoint> = listOf(
+        FovCalibrationPoint(0.15f, 0.2f, "Left"),
+        FovCalibrationPoint(0.5f, 0.5f, "Center"),
+        FovCalibrationPoint(0.85f, 0.2f, "Right")
+    ),
     val planesDistanceValue: Float = 0.5f,
     val planesDistance: Float = 10f,
     val nearbyAircraft: List<AircraftData> = emptyList(),
@@ -162,7 +177,8 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             planesDistance = 10f.pow(prefs.getFloat(KEY_PLANES_DIST_VAL, 0.5f) * log10(99f)),
             isVerbose = prefs.getBoolean(KEY_IS_VERBOSE, false),
             showGrounded = prefs.getBoolean(KEY_SHOW_GROUNDED, true),
-            showConstellations = prefs.getBoolean(KEY_SHOW_CONSTELLATIONS, false)
+            showConstellations = prefs.getBoolean(KEY_SHOW_CONSTELLATIONS, false),
+            hFov = prefs.getFloat(KEY_H_FOV, 60f)
         )
     )
     val uiState: StateFlow<SensorData> = _uiState.asStateFlow()
@@ -184,6 +200,8 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
     private var lastLat = 0.0
     private var lastLon = 0.0
     private var lastRawAccel = FloatArray(3)
+    private var isPlanesMode = false
+    private var hasInitialAircraftFetched = false
 
     // Rotation matrices
     private var fusedMatrix = FloatArray(9) { if ((it % 4) == 0) 1f else 0f }
@@ -223,6 +241,14 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         
         startAircraftRefreshLoop()
         startCelestialRefreshLoop()
+    }
+
+    fun setAppMode(mode: String) {
+        val wasPlanes = isPlanesMode
+        isPlanesMode = mode == "PLANES"
+        if (isPlanesMode && !wasPlanes && hasInitialAircraftFetched) {
+            triggerManualAircraftRefresh()
+        }
     }
 
     private fun startCelestialRefreshLoop() {
@@ -326,10 +352,13 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             var sourceIndex = 0
             
             while (true) {
-                refreshAircraftData(sources[sourceIndex])
-                sourceIndex = (sourceIndex + 1) % sources.size
-                // Rotate every 1 minute for a more complete merged list
-                delay(60 * 1000L) 
+                if (hasInitialAircraftFetched) {
+                    refreshAircraftData(sources[sourceIndex])
+                    sourceIndex = (sourceIndex + 1) % sources.size
+                }
+                
+                val delayMs = if (isPlanesMode) 60 * 1000L else 15 * 60 * 1000L
+                delay(delayMs) 
             }
         }
     }
@@ -530,6 +559,87 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         prefs.edit().putBoolean(KEY_SHOW_CONSTELLATIONS, newState).apply()
     }
 
+    fun updateHFov(fov: Float) {
+        val clamped = fov.coerceIn(10f, 170f)
+        _uiState.value = _uiState.value.copy(hFov = clamped)
+        prefs.edit().putFloat(KEY_H_FOV, clamped).apply()
+    }
+
+    fun captureFovPoint(index: Int, screenWidth: Float) {
+        val currentPoints = _uiState.value.fovCalibrationPoints.toMutableList()
+        if (index !in currentPoints.indices) return
+
+        // Extract current raw gyro azimuth (ignore world calibration)
+        val gyroOrientation = getOrientationFromMatrix(if (_uiState.value.hasBeenCalibrated) gyroOnlyMatrix else fusedMatrix)
+        currentPoints[index] = currentPoints[index].copy(capturedAzimuth = gyroOrientation.azimuth)
+        
+        _uiState.value = _uiState.value.copy(fovCalibrationPoints = currentPoints)
+
+        // Check if all 3 are captured
+        val center = currentPoints.find { it.label == "Center" }
+        val left = currentPoints.find { it.label == "Left" }
+        val right = currentPoints.find { it.label == "Right" }
+
+        if (center?.capturedAzimuth != null && (left?.capturedAzimuth != null || right?.capturedAzimuth != null)) {
+            val cAz = center.capturedAzimuth!!
+            
+            // Calculate Focal Length using Left or Right (or both)
+            var fSum = 0.0
+            var count = 0
+            
+            left?.capturedAzimuth?.let { lAz ->
+                val deltaH = (cAz - lAz + 540) % 360 - 180
+                val deltaX = (center.xPercent - left.xPercent) * screenWidth
+                if (abs(deltaH) > 0.5) {
+                    fSum += deltaX / tan(Math.toRadians(deltaH.toDouble()))
+                    count++
+                }
+            }
+            
+            right?.capturedAzimuth?.let { rAz ->
+                val deltaH = (cAz - rAz + 540) % 360 - 180
+                val deltaX = (center.xPercent - right.xPercent) * screenWidth
+                if (abs(deltaH) > 0.5) {
+                    fSum += deltaX / tan(Math.toRadians(deltaH.toDouble()))
+                    count++
+                }
+            }
+            
+            if (count > 0) {
+                val f = fSum / count
+                val newHovDeg = Math.toDegrees(2.0 * atan((screenWidth / 2.0) / abs(f))).toFloat()
+                updateHFov(newHovDeg)
+            }
+        }
+    }
+
+    fun resetFovCalibration() {
+        _uiState.value = _uiState.value.copy(
+            fovCalibrationPoints = listOf(
+                FovCalibrationPoint(0.15f, 0.2f, "Left"),
+                FovCalibrationPoint(0.5f, 0.5f, "Center"),
+                FovCalibrationPoint(0.85f, 0.2f, "Right")
+            )
+        )
+    }
+
+    fun calculateAndSetFov(screenWidth: Float, xTouch: Float, headingCenter: Float, headingTouch: Float) {
+        val deltaHeadingDeg = (headingCenter - headingTouch + 540) % 360 - 180
+        if (abs(deltaHeadingDeg) < 1.0) return // Avoid division by small numbers or zero
+        
+        val deltaX = xTouch - (screenWidth / 2f)
+        if (abs(deltaX) < 10) return // Avoid noise
+        
+        // deltaX = f * tan(deltaHeading)
+        val f = deltaX / tan(Math.toRadians(deltaHeadingDeg.toDouble())).toFloat()
+        
+        // hFov = 2 * atan((width/2) / f)
+        val newHovRad = 2.0 * atan((screenWidth / 2.0) / abs(f.toDouble()))
+        val newHovDeg = Math.toDegrees(newHovRad).toFloat()
+        
+        updateHFov(newHovDeg)
+    }
+
     fun triggerManualAircraftRefresh() {
         viewModelScope.launch {
             val currentSource = _uiState.value.lastAdbSource
@@ -705,9 +815,6 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
                 gpsNorthOffset ?: manualNorthOffset
             }
             
-            val currentGpsHeading = gpsNorthOffset?.let { (gyroOrientation.azimuth + it + 360) % 360 }
-            val currentManualHeading = manualNorthOffset?.let { (gyroOrientation.azimuth + it + 360) % 360 }
-
             // Apply low-pass filter to true orientation elements
             filteredTruePitch = filteredTruePitch + alpha * (gyroOrientation.pitch - filteredTruePitch)
             filteredTrueRoll = filteredTrueRoll + alpha * (gyroOrientation.roll - filteredTrueRoll)
@@ -723,6 +830,9 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
                 filteredTrueAzimuth
             }
 
+            val currentGpsHeading = gpsNorthOffset?.let { (filteredTrueAzimuth + it + 360) % 360 }
+            val currentManualHeading = manualNorthOffset?.let { (filteredTrueAzimuth + it + 360) % 360 }
+
             // Bubble offsets: Projected World Z onto Device XY
             val gBX = Math.toDegrees(asin(fusedMatrix[6].toDouble())).toFloat()
             val gBY = Math.toDegrees(asin(fusedMatrix[7].toDouble())).toFloat()
@@ -731,7 +841,9 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
             val wBY = Math.toDegrees(asin(currentGyroMatrix[7].toDouble())).toFloat()
 
             _uiState.value = _uiState.value.copy(
-                pitch = fusedOrientation.pitch, roll = fusedOrientation.roll, heading = fusedOrientation.azimuth, headingString = getHeadingString(fusedOrientation.azimuth),
+                pitch = fusedOrientation.pitch, roll = fusedOrientation.roll, 
+                heading = fusedOrientation.azimuth, 
+                headingString = getHeadingString(fusedOrientation.azimuth),
                 truePitch = filteredTruePitch, trueRoll = filteredTrueRoll, trueFullPitch = filteredTrueFullPitch,
                 trueHeading = currentTrueHeading,
                 trueHeadingString = getHeadingString(currentTrueHeading),
@@ -746,11 +858,19 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         }
     }
 
-    fun addLocationData(lat: Double, lon: Double) {
+    fun addLocationData(lat: Double, lon: Double, speed: Float = 0f, course: Float = 0f) {
+        if (lat == 0.0 && lon == 0.0) return
+        _uiState.value = _uiState.value.copy(gpsSpeed = speed * 3.6f, gpsCourse = course)
         val wasZero = lastLat == 0.0 && lastLon == 0.0
         lastLat = lat; lastLon = lon
         if (wasZero) {
-            viewModelScope.launch { refreshCelestialData() }
+            viewModelScope.launch { 
+                refreshCelestialData()
+                if (!hasInitialAircraftFetched) {
+                    refreshAircraftData("Airplanes.Live")
+                    hasInitialAircraftFetched = true
+                }
+            }
         }
     }
 
@@ -792,9 +912,13 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         val fullPitch: Float
         
         // Check for vertical orientation (gimbal lock) where Screen Forward is parallel to World Z
-        if (abs(vfz) > 0.99f) { 
-            // Looking straight down or up. Azimuth is defined by Screen Top (Dy).
-            azimuth = (Math.toDegrees(atan2(remapped[1].toDouble(), remapped[4].toDouble())).toFloat() + 360) % 360
+        // cos(15 degrees) approx 0.966
+        if (abs(vfz) > 0.966f) {
+            // Looking straight down or up. Bearing refers to the direction the top of the phone (Device Y) is pointing.
+            // Azimuth = atan2(DeviceY.East, DeviceY.North)
+            // remapped[3] is Row 1, Col 0 (East component of Device Y)
+            // remapped[4] is Row 1, Col 1 (North component of Device Y)
+            azimuth = (Math.toDegrees(atan2(remapped[3].toDouble(), remapped[4].toDouble())).toFloat() + 360) % 360
             roll = 0f
             fullPitch = pitch
         } else {
@@ -858,6 +982,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application),
         private const val KEY_SHOW_CONSTELLATIONS = "show_constellations"
         private const val KEY_SENSOR_DELAY = "sensor_delay"
         private const val KEY_OVERLAY_ALPHA = "overlay_alpha"
+        private const val KEY_H_FOV = "h_fov"
     }
 }
 

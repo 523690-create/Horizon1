@@ -34,6 +34,13 @@ import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.horizon3.ui.CameraPreview
 import com.example.horizon3.ui.OverlayView
+import androidx.compose.foundation.background
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 
 class MainActivity : ComponentActivity() {
@@ -80,6 +87,11 @@ class MainActivity : ComponentActivity() {
             var selectedMode by remember { mutableStateOf(AppMode.ALTIMETER) }
             var radioButtonsHeight by remember { mutableStateOf(0) }
 
+            LaunchedEffect(selectedMode) {
+                sensorViewModel.setAppMode(selectedMode.name)
+                altimeterViewModel.setAppMode(selectedMode.name)
+            }
+
 
             // Update display rotation
             val rotation = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
@@ -95,6 +107,8 @@ class MainActivity : ComponentActivity() {
                 sensorViewModel.addLocationData(
                     locationData.latitude,
                     locationData.longitude,
+                    locationData.speed,
+                    locationData.bearing
                 )
                 altimeterViewModel.updateLocation(
                     locationData.latitude,
@@ -124,7 +138,10 @@ class MainActivity : ComponentActivity() {
                     onVerboseToggle = { sensorViewModel.toggleVerbose() },
                     onGroundedToggle = { sensorViewModel.toggleGrounded() },
                     onConstellationToggle = { sensorViewModel.toggleConstellations() },
-                    onRadarClick = { sensorViewModel.triggerManualAircraftRefresh() },
+                    onRadarClick = { sensorViewModel.resetFovCalibration() },
+                    onFovPointClick = { sensorViewModel.captureFovPoint(it, context.resources.displayMetrics.widthPixels.toFloat()) },
+                    onStartManualCal = { sensorViewModel.captureManualOrientation() },
+                    onCancelManualCal = { sensorViewModel.cancelManualCalibration() },
                     appMode = selectedMode.name
                 )
 
@@ -179,9 +196,11 @@ class MainActivity : ComponentActivity() {
                     SettingsDialog(
                         currentDelay = sensorData.sensorDelay,
                         currentAlpha = sensorData.overlayAlpha,
+                        currentFov = sensorData.hFov,
                         onDismiss = { showSettings = false },
                         onUpdateDelay = { sensorViewModel.updateSensorDelay(it) },
-                        onUpdateAlpha = { sensorViewModel.updateOverlayAlpha(it) }
+                        onUpdateAlpha = { sensorViewModel.updateOverlayAlpha(it) },
+                        onUpdateFov = { sensorViewModel.updateHFov(it) }
                     )
                 }
 
@@ -199,21 +218,7 @@ class MainActivity : ComponentActivity() {
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.clickable {
                                 selectedMode = mode
-                                when (mode) {
-                                    AppMode.CALIBRATE -> {
-                                        if (sensorData.overlayAlpha > 0.5f) {
-                                            sensorViewModel.captureManualOrientation()
-                                        } else {
-                                            showManualDialog = true
-                                        }
-                                    }
-                                    AppMode.SETTINGS -> {
-                                        showSettings = true
-                                    }
-                                    else -> {
-                                        // TBA
-                                    }
-                                }
+                                if (mode == AppMode.SETTINGS) showSettings = true
                             }
                         ) {
                             Text(
@@ -224,21 +229,7 @@ class MainActivity : ComponentActivity() {
                                 selected = selectedMode == mode,
                                 onClick = {
                                     selectedMode = mode
-                                    when (mode) {
-                                        AppMode.CALIBRATE -> {
-                                            if (sensorData.overlayAlpha > 0.5f) {
-                                                sensorViewModel.captureManualOrientation()
-                                            } else {
-                                                showManualDialog = true
-                                            }
-                                        }
-                                        AppMode.SETTINGS -> {
-                                            showSettings = true
-                                        }
-                                        else -> {
-                                            // TBA
-                                        }
-                                    }
+                                    if (mode == AppMode.SETTINGS) showSettings = true
                                 },
                                 colors = RadioButtonDefaults.colors(
                                     selectedColor = Color.Yellow,
@@ -275,50 +266,73 @@ class MainActivity : ComponentActivity() {
 fun SettingsDialog(
     currentDelay: Int,
     currentAlpha: Float,
+    currentFov: Float,
     onDismiss: () -> Unit,
     onUpdateDelay: (Int) -> Unit,
-    onUpdateAlpha: (Float) -> Unit
+    onUpdateAlpha: (Float) -> Unit,
+    onUpdateFov: (Float) -> Unit
 ) {
     var selectedDelay by remember { mutableStateOf(currentDelay) }
     var selectedAlpha by remember { mutableStateOf(currentAlpha) }
+    var selectedFov by remember { mutableStateOf(currentFov) }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text("Settings") },
-        text = {
-            Column {
-                Text("Sensor Delay")
-                Row {
-                    Button(onClick = { selectedDelay = android.hardware.SensorManager.SENSOR_DELAY_FASTEST }) { Text("Fastest") }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Button(onClick = { selectedDelay = android.hardware.SensorManager.SENSOR_DELAY_GAME }) { Text("Game") }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Button(onClick = { selectedDelay = android.hardware.SensorManager.SENSOR_DELAY_UI }) { Text("UI") }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Button(onClick = { selectedDelay = android.hardware.SensorManager.SENSOR_DELAY_NORMAL }) { Text("Normal") }
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Bottom Dialog
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+                tonalElevation = 8.dp
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Settings", style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Text("Sensor Delay")
+                    Row {
+                        Button(onClick = { selectedDelay = android.hardware.SensorManager.SENSOR_DELAY_FASTEST }) { Text("Fast") }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Button(onClick = { selectedDelay = android.hardware.SensorManager.SENSOR_DELAY_GAME }) { Text("Game") }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Button(onClick = { selectedDelay = android.hardware.SensorManager.SENSOR_DELAY_UI }) { Text("UI") }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Text("Overlay Alpha: ${"%.2f".format(selectedAlpha)}")
+                    Slider(
+                        value = selectedAlpha, 
+                        onValueChange = { 
+                            selectedAlpha = it 
+                            onUpdateAlpha(it) // Live update
+                        }, 
+                        valueRange = 0.1f..1.0f
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onDismiss) { Text("CANCEL") }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(onClick = {
+                            onUpdateDelay(selectedDelay)
+                            onUpdateAlpha(selectedAlpha)
+                            onUpdateFov(selectedFov)
+                            onDismiss()
+                        }) {
+                            Text("SAVE")
+                        }
+                    }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Overlay Alpha: ${"%.2f".format(selectedAlpha)}")
-                Slider(
-                    value = selectedAlpha,
-                    onValueChange = { selectedAlpha = it },
-                    valueRange = 0.1f..1.0f
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
-                onUpdateDelay(selectedDelay)
-                onUpdateAlpha(selectedAlpha)
-                onDismiss()
-            }) {
-                Text("SAVE")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("CANCEL")
             }
         }
-    )
+    }
 }
