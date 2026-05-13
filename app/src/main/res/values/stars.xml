@@ -1,70 +1,161 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string-array name="star_data">
-        <item>Sirius;α Canis Majoris;-1.44;101.287083;-16.716111</item>
-        <item>Canopus;α Carinae;-0.62;95.987917;-52.695556</item>
-        <item>Arcturus;α Boötis;-0.05;213.915417;19.1825</item>
-        <item>Rigel Kentaurus;α Centauri;-0.01;219.902083;-60.833889</item>
-        <item>Vega;α Lyrae;0.03;279.234583;38.783611</item>
-        <item>Capella;α Aurigae;0.08;79.1725;45.998056</item>
-        <item>Rigel;β Orionis;0.18;78.634583;-8.201667</item>
-        <item>Procyon;α Canis Minoris;0.4;114.825417;5.225</item>
-        <item>Achernar;α Eridani;0.45;24.428333;-57.236667</item>
-        <item>Betelgeuse;α Orionis;0.45;88.792917;7.406944</item>
-        <item>Hadar;β Centauri;0.61;210.955833;-60.373056</item>
-        <item>Altair;α Aquilae;0.76;297.695833;8.868333</item>
-        <item>Acrux;α Crucis;0.77;186.649583;-63.099167</item>
-        <item>Aldebaran;α Tauri;0.87;68.98;16.509167</item>
-        <item>Spica;α Virginis;0.98;201.298333;-11.161389</item>
-        <item>Antares;α Scorpii;1.06;247.352083;-26.431944</item>
-        <item>Pollux;β Geminorum;1.16;116.32875;28.026111</item>
-        <item>Fomalhaut;α Piscis Austrini;1.17;344.4125;-29.622222</item>
-        <item>Deneb;α Cygni;1.25;310.357917;45.280278</item>
-        <item>Mimosa;β Crucis;1.25;191.93;-59.688611</item>
-        <item>Regulus;α Leonis;1.36;152.092917;11.967222</item>
-        <item>Adhara;ε Canis Majoris;1.5;104.65625;-28.972222</item>
-        <item>Castor;α Geminorum;1.58;113.65;31.888333</item>
-        <item>Shaula;λ Scorpii;1.62;263.402083;-37.103889</item>
-        <item>Gacrux;γ Crucis;1.63;187.79125;-57.113333</item>
-        <item>Bellatrix;γ Orionis;1.64;81.282917;6.349722</item>
-        <item>Elnath;β Tauri;1.65;81.572917;28.6075</item>
-        <item>Miaplacidus;β Carinae;1.67;138.3;-69.717222</item>
-        <item>Alnilam;ε Orionis;1.69;84.053333;-1.201944</item>
-        <item>Alnair;α Gruis;1.73;332.058333;-46.961111</item>
-        <item>Alnitak;ζ Orionis;1.74;85.189583;-1.942778</item>
-        <item>Alioth;ε Ursae Majoris;1.76;193.507083;55.959722</item>
-        <item>Mirphak;α Persei;1.79;51.080833;49.861111</item>
-        <item>Dubhe;α Ursae Majoris;1.81;165.932083;61.750833</item>
-        <item>Kaus Australis;ε Sagittarii;1.85;276.042917;-34.384722</item>
-        <item>Alkaid;η Ursae Majoris;1.85;206.885;49.313333</item>
-        <item>Avior;ε Carinae;1.86;125.628333;-59.509444</item>
-        <item>Menkalinan;β Aurigae;1.9;89.882083;44.9475</item>
-        <item>Atria;α Trianguli Australis;1.91;252.16625;-69.027778</item>
-        <item>Alhena;γ Geminorum;1.93;99.427917;16.399167</item>
-        <item>Peacock;α Pavonis;1.94;306.412083;-56.735</item>
-        <item>Polaris;α Ursae Minoris;1.97;37.954583;89.264167</item>
-        <item>Alphard;α Hydrae;1.99;141.896667;-8.658611</item>
-        <item>Hamal;α Arietis;2.01;31.793333;23.4625</item>
+        <item>Sirius;α Canis Major;-1.44;101.287083;-16.716111</item>
+        <item>Canopus;α Carina;-0.62;95.987917;-52.695556</item>
+        <item>Arcturus;α Boötes;-0.05;213.915417;19.1825</item>
+        <item>Rigel Kentaurus;α Centaurus;-0.01;219.902083;-60.833889</item>
+        <item>Vega;α Lyra;0.03;279.234583;38.783611</item>
+        <item>Capella;α Auriga;0.08;79.1725;45.998056</item>
+        <item>Rigel;β Orion;0.18;78.634583;-8.201667</item>
+        <item>Procyon;α Canis Minor;0.4;114.825417;5.225</item>
+        <item>Achernar;α Eridanus;0.45;24.428333;-57.236667</item>
+        <item>Betelgeuse;α Orion;0.45;88.792917;7.406944</item>
+        <item>Hadar;β Centaurus;0.61;210.955833;-60.373056</item>
+        <item>Altair;α Aquila;0.76;297.695833;8.868333</item>
+        <item>Acrux;α Crux;0.77;186.649583;-63.099167</item>
+        <item>Aldebaran;α Taurus;0.87;68.98;16.509167</item>
+        <item>Spica;α Virgo;0.98;201.298333;-11.161389</item>
+        <item>Antares;α Scorpius;1.06;247.352083;-26.431944</item>
+        <item>Pollux;β Gemini;1.16;116.32875;28.026111</item>
+        <item>Fomalhaut;α Piscis Austrinus;1.17;344.4125;-29.622222</item>
+        <item>Deneb;α Cygnus;1.25;310.357917;45.280278</item>
+        <item>Mimosa;β Crux;1.25;191.93;-59.688611</item>
+        <item>Regulus;α Leo;1.36;152.092917;11.967222</item>
+        <item>Adhara;ε Canis Major;1.5;104.65625;-28.972222</item>
+        <item>Castor;α Gemini;1.58;113.65;31.888333</item>
+        <item>Shaula;λ Scorpius;1.62;263.402083;-37.103889</item>
+        <item>Gacrux;γ Crux;1.63;187.79125;-57.113333</item>
+        <item>Bellatrix;γ Orion;1.64;81.282917;6.349722</item>
+        <item>Elnath;β Taurus;1.65;81.572917;28.6075</item>
+        <item>Miaplacidus;β Carina;1.67;138.3;-69.717222</item>
+        <item>Alnilam;ε Orion;1.69;84.053333;-1.201944</item>
+        <item>Alnair;α Grus;1.73;332.058333;-46.961111</item>
+        <item>Alnitak;ζ Orion;1.74;85.189583;-1.942778</item>
+        <item>Alioth;ε Ursa Major;1.76;193.507083;55.959722</item>
+        <item>Mirphak;α Perseus;1.79;51.080833;49.861111</item>
+        <item>Dubhe;α Ursa Major;1.81;165.932083;61.750833</item>
+        <item>Kaus Australis;ε Sagittarius;1.85;276.042917;-34.384722</item>
+        <item>Alkaid;η Ursa Major;1.85;206.885;49.313333</item>
+        <item>Avior;ε Carina;1.86;125.628333;-59.509444</item>
+        <item>Menkalinan;β Auriga;1.9;89.882083;44.9475</item>
+        <item>Atria;α Triangulum Australe;1.91;252.16625;-69.027778</item>
+        <item>Alhena;γ Gemini;1.93;99.427917;16.399167</item>
+        <item>Peacock;α Pavo;1.94;306.412083;-56.735</item>
+        <item>Polaris;α Ursa Minor;1.97;37.954583;89.264167</item>
+        <item>Alphard;α Hydra;1.99;141.896667;-8.658611</item>
+        <item>Hamal;α Aries;2.01;31.793333;23.4625</item>
         <!-- Additional Stars for Constellations -->
-        <item>Mintaka;δ Orionis;2.23;83.001667;-0.298889</item>
-        <item>Saiph;κ Orionis;2.06;86.939167;-9.669167</item>
-        <item>Merak;β Ursae Majoris;2.37;165.460417;56.3825</item>
-        <item>Phecda;γ Ursae Majoris;2.44;178.457917;53.694722</item>
-        <item>Megrez;δ Ursae Majoris;3.31;183.856667;57.032222</item>
-        <item>Mizar;ζ Ursae Majoris;2.23;200.081667;54.925278</item>
-        <item>Imai;δ Crucis;2.79;182.420417;-58.75</item>
+        <item>Mintaka;δ Orion;2.23;83.001667;-0.298889</item>
+        <item>Saiph;κ Orion;2.06;86.939167;-9.669167</item>
+        <item>Merak;β Ursa Major;2.37;165.460417;56.3825</item>
+        <item>Phecda;γ Ursa Major;2.44;178.457917;53.694722</item>
+        <item>Megrez;δ Ursa Major;3.31;183.856667;57.032222</item> <!-- Dim -->
+        <item>Mizar;ζ Ursa Major;2.23;200.081667;54.925278</item>
+        <item>Imai;δ Crux;2.79;182.420417;-58.75</item>
         <!-- Cassiopeia -->
-        <item>Schedar;α Cassiopeiae;2.24;10.127083;56.537222</item>
-        <item>Caph;β Cassiopeiae;2.28;2.294583;59.149722</item>
-        <item>Tsih;γ Cassiopeiae;2.15;14.177083;60.716667</item>
-        <item>Ksora;δ Cassiopeiae;2.66;20.219583;60.235278</item>
-        <item>Segin;ε Cassiopeiae;3.35;28.599167;63.670278</item>
+        <item>Schedar;α Cassiopeia;2.24;10.127083;56.537222</item>
+        <item>Caph;β Cassiopeia;2.28;2.294583;59.149722</item>
+        <item>Tsih;γ Cassiopeia;2.15;14.177083;60.716667</item>
+        <item>Ksora;δ Cassiopeia;2.66;20.219583;60.235278</item>
+
         <!-- Leo (extra) -->
-        <item>Denebola;β Leonis;2.14;177.264583;14.572222</item>
-        <item>Algieba;γ Leonis;2.01;154.9925;19.841667</item>
+        <item>Denebola;β Leo;2.14;177.264583;14.572222</item>
+        <item>Algieba;γ Leo;2.01;154.9925;19.841667</item>
         <!-- Scorpius (extra) -->
-        <item>Sargas;θ Scorpii;1.86;264.33125;-42.997778</item>
-        <item>Dschubba;δ Scorpii;2.29;240.083333;-22.621667</item>
-        <item>Wei;ε Scorpii;2.29;252.545833;-34.2925</item>
+        <item>Sargas;θ Scorpius;1.86;264.33125;-42.997778</item>
+        <item>Dschubba;δ Scorpius;2.29;240.083333;-22.621667</item>
+        <item>Wei;ε Scorpius;2.29;252.545833;-34.2925</item>
+
+        <!-- ANDROMEDA -->
+        <item>Alpheratz;α Andromeda;2.06;2.096916;29.090431</item>
+        <item>Mirach;β Andromeda;2.06;17.433000;35.620556</item>
+        <item>Almach;γ Andromeda;2.10;30.974750;42.329722</item>
+
+
+
+        <!-- AQUARIUS -->
+        <item>Sadalmelik;α Aquarius;2.95;337.822083;-0.020000</item>
+        <item>Sadalsuud;β Aquarius;2.90;334.208333;-5.570000</item>
+
+
+
+
+        <!-- CANIS MAJOR -->
+
+        <item>Mirzam;β Canis Major;1.98;95.675000;-17.955833</item>
+        <item>Muliphein;γ Canis Major;4.11;98.225000;-15.646667</item> <!-- Dim -->
+        <item>Wezen;δ Canis Major;1.83;104.656250;-26.393333</item>
+        <item>Adhara;ε Canis Major;1.50;104.656250;-28.972222</item> <!-- Duplicate -->
+
+
+
+        <!-- CENTAURUS -->
+        <item>Rigil Kentaurus;α Centaurus;-0.27;219.902083;-60.833889</item>
+
+        <item>Menkent;θ Centaurus;2.06;200.149167;-36.712222</item>
+        <item>γ Centaurus;γ Centaurus;2.17;192.190833;-48.959722</item>
+
+
+
+        <!-- CORVUS -->
+        <item>Gienah;γ Corvus;2.59;187.466250;-17.542500</item>
+        <item>Algorab;δ Corvus;2.94;187.791250;-16.515556</item>
+        <item>β Corvus;β Corvus;2.65;182.103333;-23.602500</item>
+        <item>ε Corvus;ε Corvus;3.00;183.951250;-22.619444</item>
+
+
+        <item>Cursa;β Eridanus;2.79;56.218750;-5.090833</item>
+        <item>Zaurak;γ Eridanus;2.95;53.232500;-13.858611</item>
+
+
+        <item>γ Hydra;γ Hydra;3.00;133.848333;-23.118056</item>
+
+
+        <!-- OPHIUCHUS -->
+        <item>Rasalhague;α Ophiuchus;2.08;263.402083;12.560000</item>
+        <item>Sabik;η Ophiuchus;2.43;263.733333;-15.460833</item>
+        <item>Yed Prior;δ Ophiuchus;2.75;247.555000;-3.693889</item>
+
+
+
+        <!-- PEGASUS -->
+        <item>Markab;α Pegasus;2.49;346.190417;15.205278</item>
+        <item>Scheat;β Pegasus;2.42;345.943750;28.082778</item>
+        <item>Algenib;γ Pegasus;2.83;0.220000;15.183611</item>
+        <item>Enif;ε Pegasus;2.39;326.046250;9.875000</item>
+
+        <!-- PERSEUS -->
+
+        <item>Algol;β Perseus;2.12;47.042917;40.955556</item>
+        <item>γ Perseus;γ Perseus;2.93;49.996250;53.155278</item>
+
+
+        <!-- PUPPIS -->
+        <item>Naos;ζ Puppis;2.25;120.896250;-40.003333</item>
+        <item>π Puppis;π Puppis;2.70;123.512500;-37.097500</item>
+
+
+        <!-- SERPENS -->
+        <item>Unukalhai;α Serpens;2.63;236.546250;6.425556</item>
+
+
+
+        <!-- URSA MINOR -->
+
+        <item>Kochab;β Ursa Minor;2.08;222.676250;74.155556</item>
+        <item>Pherkad;γ Ursa Minor;3.05;230.343750;71.834167</item> <!-- Dim -->
+
+        <!-- VELA -->
+        <item>Regor;γ Vela;1.75;122.383333;-47.336667</item>
+        <item>δ Vela;δ Vela;1.96;131.175000;-54.708333</item>
+        <item>κ Vela;κ Vela;2.48;136.998333;-55.968333</item>
+
+        <!-- VIRGO -->
+
+        <item>Porrima;γ Virgo;2.74;190.415833;-1.449444</item>
+        <item>Vindemiatrix;ε Virgo;2.83;201.298333;10.959167</item>
+
+
     </string-array>
 </resources>
